@@ -6,7 +6,7 @@ if (!isLoggedIn()) {
 }
 
 // Get products and suppliers for dropdown
-$products = mysqli_query($conn, "SELECT id, name FROM products ORDER BY name");
+$products = mysqli_query($conn, "SELECT id, name,category FROM products ORDER BY name");
 $suppliers = mysqli_query($conn, "SELECT id, name FROM suppliers ORDER BY name");
 
 // Handle Add Purchase
@@ -118,6 +118,56 @@ $purchases = mysqli_query($conn, "
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Purchases - Small Stock Management</title>
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        .searchable-select {
+            position: relative;
+        }
+        .searchable-select-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 14px;
+            background: var(--white);
+            cursor: text;
+        }
+        .searchable-select-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+        .searchable-select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--white);
+            border: 1px solid var(--gray-300);
+            border-top: none;
+            border-radius: 0 0 var(--radius) var(--radius);
+            z-index: 1000;
+            box-shadow: var(--shadow-md);
+        }
+        .searchable-select-dropdown.open {
+            display: block;
+        }
+        .searchable-select-option {
+            padding: 9px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .searchable-select-option:hover,
+        .searchable-select-option.highlighted {
+            background: var(--gray-100);
+            color: var(--primary);
+        }
+        .searchable-select-option.hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
     <div class="dashboard-container">
@@ -257,12 +307,17 @@ $purchases = mysqli_query($conn, "
                 </div>
                 <div class="form-group">
                     <label for="product_id">Product*</label>
-                    <select id="product_id" name="product_id" required>
-                        <option value="">Select Product</option>
-                        <?php while($row = mysqli_fetch_assoc($products)): ?>
-                            <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['name']); ?></option>
-                        <?php endwhile; ?>
-                    </select>
+                    <div class="searchable-select" id="productSearchable">
+                        <input type="hidden" id="product_id" name="product_id" required>
+                        <input type="text" class="searchable-select-input" id="product_search" placeholder="Search product..." autocomplete="off">
+                        <div class="searchable-select-dropdown" id="product_dropdown">
+                            <?php while($row = mysqli_fetch_assoc($products)): ?>
+                                <div class="searchable-select-option" data-value="<?php echo $row['id']; ?>">
+                                    <?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>
+                                </div>
+                            <?php endwhile; ?>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="quantity">Quantity (Number of packages)*</label>
@@ -310,6 +365,85 @@ $purchases = mysqli_query($conn, "
     <script src="script.js"></script>
     <script>
         createAdvancedTableSearch('txtSearchPurchases', 'tblPurchases', []);
+
+        // Searchable product select
+        (function() {
+            var hiddenInput = document.getElementById('product_id');
+            var searchInput = document.getElementById('product_search');
+            var dropdown = document.getElementById('product_dropdown');
+            var options = dropdown.querySelectorAll('.searchable-select-option');
+            var highlightedIndex = -1;
+
+            searchInput.addEventListener('focus', function() {
+                dropdown.classList.add('open');
+                filterOptions();
+            });
+
+            searchInput.addEventListener('input', function() {
+                dropdown.classList.add('open');
+                highlightedIndex = -1;
+                filterOptions();
+            });
+
+            searchInput.addEventListener('keydown', function(e) {
+                var visible = dropdown.querySelectorAll('.searchable-select-option:not(.hidden)');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    highlightedIndex = Math.min(highlightedIndex + 1, visible.length - 1);
+                    updateHighlight(visible);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
+                    updateHighlight(visible);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (highlightedIndex >= 0 && visible[highlightedIndex]) {
+                        selectOption(visible[highlightedIndex]);
+                    }
+                } else if (e.key === 'Escape') {
+                    dropdown.classList.remove('open');
+                    searchInput.blur();
+                }
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#productSearchable')) {
+                    dropdown.classList.remove('open');
+                }
+            });
+
+            options.forEach(function(opt) {
+                opt.addEventListener('click', function() {
+                    selectOption(opt);
+                });
+            });
+
+            function filterOptions() {
+                var term = searchInput.value.toLowerCase();
+                options.forEach(function(opt) {
+                    if (opt.textContent.trim().toLowerCase().indexOf(term) > -1) {
+                        opt.classList.remove('hidden');
+                    } else {
+                        opt.classList.add('hidden');
+                    }
+                });
+            }
+
+            function updateHighlight(visible) {
+                options.forEach(function(o) { o.classList.remove('highlighted'); });
+                if (visible[highlightedIndex]) {
+                    visible[highlightedIndex].classList.add('highlighted');
+                    visible[highlightedIndex].scrollIntoView({ block: 'nearest' });
+                }
+            }
+
+            function selectOption(opt) {
+                hiddenInput.value = opt.getAttribute('data-value');
+                searchInput.value = opt.textContent.trim();
+                dropdown.classList.remove('open');
+                highlightedIndex = -1;
+            }
+        })();
 
         function toggleDateGroup(header) {
             var groupId = header.getAttribute('data-toggle');

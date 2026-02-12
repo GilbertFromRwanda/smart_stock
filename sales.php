@@ -75,7 +75,7 @@ unset($_SESSION['flash_sale_type']);
 
 // Get products for bulk sale
 $bulk_products = mysqli_query($conn, "
-    SELECT s.*, p.name, p.unit_measure 
+    SELECT s.*, p.name, p.unit_measure ,p.category
     FROM stock s
     JOIN products p ON s.product_id = p.id
     WHERE s.quantity > 0
@@ -83,7 +83,7 @@ $bulk_products = mysqli_query($conn, "
 
 // Get products for retail sale
 $retail_products = mysqli_query($conn, "
-    SELECT r.*, p.name, p.unit_measure 
+    SELECT r.*, p.name, p.unit_measure,p.category
     FROM retail_stock r
     JOIN products p ON r.product_id = p.id
     WHERE r.pieces_quantity > 0
@@ -121,6 +121,56 @@ $recent_retail_sales = mysqli_query($conn, "
     <title>Sales - Small Stock Management</title>
         <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/sales.css">
+    <style>
+        .searchable-select {
+            position: relative;
+        }
+        .searchable-select-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 14px;
+            background: var(--white);
+            cursor: text;
+        }
+        .searchable-select-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+        .searchable-select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--white);
+            border: 1px solid var(--gray-300);
+            border-top: none;
+            border-radius: 0 0 var(--radius) var(--radius);
+            z-index: 1000;
+            box-shadow: var(--shadow-md);
+        }
+        .searchable-select-dropdown.open {
+            display: block;
+        }
+        .searchable-select-option {
+            padding: 9px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .searchable-select-option:hover,
+        .searchable-select-option.highlighted {
+            background: var(--gray-100);
+            color: var(--primary);
+        }
+        .searchable-select-option.hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
     <div class="dashboard-container">
@@ -281,7 +331,7 @@ $recent_retail_sales = mysqli_query($conn, "
             <form method="POST" action="" id="bulkSaleForm" onsubmit="return confirmBulkSale()">
                 <div class="form-group">
                     <label for="bulk_product_id">Select Product*</label>
-                    <select id="bulk_product_id" name="product_id" required onchange="updateBulkProductDetails()">
+                    <select id="bulk_product_id" name="product_id" required onchange="updateBulkProductDetails()" style="display:none">
                         <option value="">Choose product...</option>
                         <?php
                         mysqli_data_seek($bulk_products, 0);
@@ -290,12 +340,30 @@ $recent_retail_sales = mysqli_query($conn, "
                             <option value="<?php echo $row['product_id']; ?>"
                                     data-price="<?php echo $row['package_price']; ?>"
                                     data-stock="<?php echo $row['quantity']; ?>"
-                                    data-product-name="<?php echo htmlspecialchars($row['name']); ?>"
+                                    data-product-name="<?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>"
                                     data-unit="<?php echo htmlspecialchars($row['unit_measure']); ?>">
-                                <?php echo htmlspecialchars($row['name']); ?>
+                                <?php echo htmlspecialchars($row['category']).'- '.  htmlspecialchars($row['name']); ?>
                             </option>
                         <?php endwhile; ?>
                     </select>
+                    <div class="searchable-select" id="bulkProductSearchable">
+                        <input type="text" class="searchable-select-input" id="bulk_product_search" placeholder="Search product..." autocomplete="off">
+                        <div class="searchable-select-dropdown" id="bulk_product_dropdown">
+                            <?php
+                            mysqli_data_seek($bulk_products, 0);
+                            while($row = mysqli_fetch_assoc($bulk_products)):
+                            ?>
+                                <div class="searchable-select-option"
+                                     data-value="<?php echo $row['product_id']; ?>"
+                                     data-price="<?php echo $row['package_price']; ?>"
+                                     data-stock="<?php echo $row['quantity']; ?>"
+                                     data-product-name="<?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>"
+                                     data-unit="<?php echo htmlspecialchars($row['unit_measure']); ?>">
+                                    <?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>
+                                </div>
+                            <?php endwhile; ?>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="bulk_product_details" class="price-history" style="display: none;">
@@ -347,7 +415,7 @@ $recent_retail_sales = mysqli_query($conn, "
             <form method="POST" action="" id="retailSaleForm" onsubmit="return confirmRetailSale()">
                 <div class="form-group">
                     <label for="retail_product_id">Select Product*</label>
-                    <select id="retail_product_id" name="product_id" required onchange="updateRetailProductDetails()">
+                    <select id="retail_product_id" name="product_id" required onchange="updateRetailProductDetails()" style="display:none">
                         <option value="">Choose product...</option>
                         <?php
                         mysqli_data_seek($retail_products, 0);
@@ -356,12 +424,30 @@ $recent_retail_sales = mysqli_query($conn, "
                             <option value="<?php echo $row['product_id']; ?>"
                                     data-price="<?php echo $row['retail_price']; ?>"
                                     data-stock="<?php echo $row['pieces_quantity']; ?>"
-                                    data-product-name="<?php echo htmlspecialchars($row['name']); ?>"
+                                    data-product-name="<?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>"
                                     data-unit="<?php echo htmlspecialchars($row['unit_measure']); ?>">
-                                <?php echo htmlspecialchars($row['name']); ?>
+                                <?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>
                             </option>
                         <?php endwhile; ?>
                     </select>
+                    <div class="searchable-select" id="retailProductSearchable">
+                        <input type="text" class="searchable-select-input" id="retail_product_search" placeholder="Search product..." autocomplete="off">
+                        <div class="searchable-select-dropdown" id="retail_product_dropdown">
+                            <?php
+                            mysqli_data_seek($retail_products, 0);
+                            while($row = mysqli_fetch_assoc($retail_products)):
+                            ?>
+                                <div class="searchable-select-option"
+                                     data-value="<?php echo $row['product_id']; ?>"
+                                     data-price="<?php echo $row['retail_price']; ?>"
+                                     data-stock="<?php echo $row['pieces_quantity']; ?>"
+                                     data-product-name="<?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>"
+                                     data-unit="<?php echo htmlspecialchars($row['unit_measure']); ?>">
+                                    <?php echo htmlspecialchars($row['category'].'-'.$row['name']); ?>
+                                </div>
+                            <?php endwhile; ?>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="retail_product_details" class="price-history" style="display: none;">
@@ -407,6 +493,93 @@ $recent_retail_sales = mysqli_query($conn, "
 
     <script src="script.js"></script>
     <script>
+        // --- Searchable Select Init ---
+        function initSearchableSelect(wrapperId, searchInputId, dropdownId, hiddenSelectId) {
+            var wrapper = document.getElementById(wrapperId);
+            var searchInput = document.getElementById(searchInputId);
+            var dropdown = document.getElementById(dropdownId);
+            var hiddenSelect = document.getElementById(hiddenSelectId);
+            var options = dropdown.querySelectorAll('.searchable-select-option');
+            var highlightedIndex = -1;
+
+            searchInput.addEventListener('focus', function() {
+                dropdown.classList.add('open');
+                filterOptions();
+            });
+
+            searchInput.addEventListener('input', function() {
+                dropdown.classList.add('open');
+                highlightedIndex = -1;
+                filterOptions();
+            });
+
+            searchInput.addEventListener('keydown', function(e) {
+                var visible = dropdown.querySelectorAll('.searchable-select-option:not(.hidden)');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    highlightedIndex = Math.min(highlightedIndex + 1, visible.length - 1);
+                    updateHighlight(visible);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
+                    updateHighlight(visible);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (highlightedIndex >= 0 && visible[highlightedIndex]) {
+                        selectOption(visible[highlightedIndex]);
+                    }
+                } else if (e.key === 'Escape') {
+                    dropdown.classList.remove('open');
+                    searchInput.blur();
+                }
+            });
+
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#' + wrapperId)) {
+                    dropdown.classList.remove('open');
+                }
+            });
+
+            options.forEach(function(opt) {
+                opt.addEventListener('click', function() {
+                    selectOption(opt);
+                });
+            });
+
+            function filterOptions() {
+                var term = searchInput.value.toLowerCase();
+                options.forEach(function(opt) {
+                    if (opt.textContent.trim().toLowerCase().indexOf(term) > -1) {
+                        opt.classList.remove('hidden');
+                    } else {
+                        opt.classList.add('hidden');
+                    }
+                });
+            }
+
+            function updateHighlight(visible) {
+                options.forEach(function(o) { o.classList.remove('highlighted'); });
+                if (visible[highlightedIndex]) {
+                    visible[highlightedIndex].classList.add('highlighted');
+                    visible[highlightedIndex].scrollIntoView({ block: 'nearest' });
+                }
+            }
+
+            function selectOption(opt) {
+                var value = opt.getAttribute('data-value');
+                searchInput.value = opt.textContent.trim();
+                dropdown.classList.remove('open');
+                highlightedIndex = -1;
+
+                // Sync hidden select and trigger its onchange
+                hiddenSelect.value = value;
+                hiddenSelect.dispatchEvent(new Event('change'));
+            }
+        }
+
+        initSearchableSelect('bulkProductSearchable', 'bulk_product_search', 'bulk_product_dropdown', 'bulk_product_id');
+        initSearchableSelect('retailProductSearchable', 'retail_product_search', 'retail_product_dropdown', 'retail_product_id');
+
         // --- Bulk Sale ---
         function updateBulkProductDetails() {
             const select = document.getElementById('bulk_product_id');

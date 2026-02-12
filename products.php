@@ -78,7 +78,7 @@ $products = mysqli_query($conn, "SELECT * FROM products where deleted=0 ORDER BY
                 <table class="table" id="tblProducts">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th>No</th>
                             <th>Name</th>
                             <th>Category</th>
                             <th>Reorder Level</th>
@@ -88,9 +88,11 @@ $products = mysqli_query($conn, "SELECT * FROM products where deleted=0 ORDER BY
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while($row = mysqli_fetch_assoc($products)): ?>
+                        <?php 
+                        $i=1;
+                        while($row = mysqli_fetch_assoc($products)): ?>
                         <tr>
-                            <td><?php echo $row['id']; ?></td>
+                            <td><?php echo $i++; ?></td>
                             <td><?php echo htmlspecialchars($row['name']); ?></td>
                             <td><?php echo htmlspecialchars($row['category']); ?></td>
                             <td><?php echo $row['reorder_level']; ?></td>
@@ -129,12 +131,12 @@ $products = mysqli_query($conn, "SELECT * FROM products where deleted=0 ORDER BY
                 
                 <div class="form-group">
                     <label for="reorder_level">Reorder Level*</label>
-                    <input type="number" id="reorder_level" name="reorder_level" value="10" required>
+                    <input type="number" id="reorder_level" name="reorder_level" value="2" required>
                 </div>
                 
                 <div class="form-group">
                     <label for="unit_measure">Unit Measure (e.g., KG, Box, Piece)*</label>
-                    <input type="text" id="unit_measure" name="unit_measure" required>
+                    <input type="text" id="unit_measure" name="unit_measure" required value="Box">
                 </div>
                 
                 <div class="form-group">
