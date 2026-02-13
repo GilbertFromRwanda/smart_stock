@@ -36,6 +36,27 @@ if (isset($_SESSION['flash_error'])) {
     unset($_SESSION['flash_error']);
 }
 
+// Handle Edit Product
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_product'])) {
+    $id = mysqli_real_escape_string($conn, $_POST['edit_id']);
+    $name = mysqli_real_escape_string($conn, $_POST['edit_name']);
+    $category = mysqli_real_escape_string($conn, $_POST['edit_category']);
+    $reorder_level = mysqli_real_escape_string($conn, $_POST['edit_reorder_level']);
+    $unit_measure = mysqli_real_escape_string($conn, $_POST['edit_unit_measure']);
+    $unit_price = mysqli_real_escape_string($conn, $_POST['edit_unit_price']);
+
+    $query = "UPDATE products SET name='$name', category='$category', reorder_level='$reorder_level',
+              unit_measure='$unit_measure', unit_price='$unit_price' WHERE id=$id";
+
+    if (mysqli_query($conn, $query)) {
+        $_SESSION['flash_success'] = "Product updated successfully";
+    } else {
+        $_SESSION['flash_error'] = "Error updating product: " . mysqli_error($conn);
+    }
+    header("Location: products.php");
+    exit(0);
+}
+
 // Handle Delete Product
 if (isset($_GET['delete'])) {
     $id = mysqli_real_escape_string($conn, $_GET['delete']);
@@ -99,7 +120,7 @@ $products = mysqli_query($conn, "SELECT * FROM products where deleted=0 ORDER BY
                             <td><?php echo htmlspecialchars($row['unit_measure']); ?></td>
                             <td>RWF <?php echo number_format($row['unit_price'], 0); ?></td>
                             <td>
-                                <a href="#" class="btn btn-sm btn-warning">Edit</a>
+                                <a href="#" class="btn btn-sm btn-warning" onclick="editProduct(<?php echo $row['id']; ?>, '<?php echo addslashes(htmlspecialchars($row['name'])); ?>', '<?php echo addslashes(htmlspecialchars($row['category'])); ?>', <?php echo $row['reorder_level']; ?>, '<?php echo addslashes(htmlspecialchars($row['unit_measure'])); ?>', <?php echo $row['unit_price']; ?>)">Edit</a>
                                 <a href="?delete=<?php echo $row['id']; ?>" 
                                    onclick="return confirm('Are you sure?')" 
                                    class="btn btn-sm btn-danger">Delete</a>
@@ -149,8 +170,57 @@ $products = mysqli_query($conn, "SELECT * FROM products where deleted=0 ORDER BY
         </div>
     </div>
     
+    <!-- Edit Product Modal -->
+    <div id="editProductModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editProductModal')">&times;</span>
+            <h2>Edit Product</h2>
+
+            <form method="POST" action="">
+                <input type="hidden" id="edit_id" name="edit_id">
+
+                <div class="form-group">
+                    <label for="edit_name">Product Name*</label>
+                    <input type="text" id="edit_name" name="edit_name" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_category">Category</label>
+                    <input type="text" id="edit_category" name="edit_category">
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_reorder_level">Reorder Level*</label>
+                    <input type="number" id="edit_reorder_level" name="edit_reorder_level" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_unit_measure">Unit Measure (e.g., KG, Box, Piece)*</label>
+                    <input type="text" id="edit_unit_measure" name="edit_unit_measure" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_unit_price">Unit Price (RWF)*</label>
+                    <input type="number" id="edit_unit_price" name="edit_unit_price" step="0.01" required>
+                </div>
+
+                <button type="submit" name="edit_product" class="btn btn-primary">Update Product</button>
+            </form>
+        </div>
+    </div>
+
     <script src="script.js"></script>
     <script>
+function editProduct(id, name, category, reorderLevel, unitMeasure, unitPrice) {
+    document.getElementById('edit_id').value = id;
+    document.getElementById('edit_name').value = name;
+    document.getElementById('edit_category').value = category;
+    document.getElementById('edit_reorder_level').value = reorderLevel;
+    document.getElementById('edit_unit_measure').value = unitMeasure;
+    document.getElementById('edit_unit_price').value = unitPrice;
+    openModal('editProductModal');
+}
+
 createAdvancedTableSearch('txtSearchProduct', 'tblProducts', [
     { index: 0, name: 'ID' },
     { index: 1, name: 'Name' },

@@ -276,6 +276,20 @@ function checkLowStock() {
     });
 }
 
+// Form submit loading state
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('form').forEach(function(form) {
+        form.addEventListener('submit', function() {
+            var btn = form.querySelector('button[type="submit"]');
+            if (btn && !btn.classList.contains('btn-loading')) {
+                btn.classList.add('btn-loading');
+                btn.dataset.originalText = btn.innerHTML;
+                btn.innerHTML = '<span class="btn-spinner"></span> Processing...';
+            }
+        });
+    });
+});
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     checkLowStock();
