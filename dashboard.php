@@ -375,6 +375,29 @@ if (($today_sales['total'] ?? 0) == 0) {
                 </div>
                 
                 <div class="stat-card">
+                    <div class="stat-icon">💵</div>
+                    <div class="stat-label">Today's Revenue</div>
+                    <div class="stat-number">RWF <?php echo number_format($today_profit, 0); ?></div>
+                    <div class="stat-trend">
+                        <?php
+                        $today_sales_total = $today_sales['total'] ?? 0;
+                        $today_margin = $today_sales_total > 0 ? ($today_profit / $today_sales_total) * 100 : 0;
+                        ?>
+                        <?php if ($today_profit > 0): ?>
+                            <span class="trend-up">Margin: <?php echo number_format($today_margin, 1); ?>%</span>
+                        <?php elseif ($today_profit < 0): ?>
+                            <span class="trend-down">Loss today</span>
+                        <?php else: ?>
+                            <span>No profit yet</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="stat-footer">
+                        Sales: RWF <?php echo number_format($today_sales_total, 0); ?> |
+                        Cost: RWF <?php echo number_format($today_sales_total - $today_profit, 0); ?>
+                    </div>
+                </div>
+
+                <div class="stat-card">
                     <div class="stat-icon">📊</div>
                     <div class="stat-label">This Week</div>
                     <div class="stat-number">RWF <?php echo number_format($week_sales, 0); ?></div>

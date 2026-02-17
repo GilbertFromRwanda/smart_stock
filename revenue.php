@@ -145,10 +145,14 @@ if (!$current_week) {
     ];
 }
 
-// Get detailed sales with profit analysis for current week
+// Date filter for sales profit table
+$filter_from = isset($_GET['from']) ? mysqli_real_escape_string($conn, $_GET['from']) : date('Y-m-d', strtotime('monday this week'));
+$filter_to = isset($_GET['to']) ? mysqli_real_escape_string($conn, $_GET['to']) : date('Y-m-d', strtotime('sunday this week'));
+
+// Get detailed sales with profit analysis for filtered date range
 $current_week_sales = mysqli_query($conn, "
     -- Bulk sales with profit
-    SELECT 
+    SELECT
         'Bulk' as sale_type,
         sb.sale_date,
         p.name as product_name,
@@ -159,29 +163,28 @@ $current_week_sales = mysqli_query($conn, "
         COALESCE(pu.cost_price * sb.quantity, 0) as total_cost,
         (sb.total_amount - COALESCE(pu.cost_price * sb.quantity, 0)) as profit,
         ROUND(
-            CASE 
-                WHEN sb.total_amount > 0 
-                THEN ((sb.total_amount - COALESCE(pu.cost_price * sb.quantity, 0)) / sb.total_amount * 100) 
-                ELSE 0 
+            CASE
+                WHEN sb.total_amount > 0
+                THEN ((sb.total_amount - COALESCE(pu.cost_price * sb.quantity, 0)) / sb.total_amount * 100)
+                ELSE 0
             END, 2
         ) as margin,
         sb.customer_name
     FROM sales_bulk sb
     JOIN products p ON sb.product_id = p.id
     LEFT JOIN purchases pu ON pu.product_id = sb.product_id
-    WHERE sb.sale_date BETWEEN '" . date('Y-m-d', strtotime('monday this week')) . "' 
-        AND '" . date('Y-m-d', strtotime('sunday this week')) . "'
+    WHERE sb.sale_date BETWEEN '$filter_from' AND '$filter_to'
     AND pu.id = (
-        SELECT id FROM purchases p2 
-        WHERE p2.product_id = sb.product_id 
-        AND p2.purchase_date <= sb.sale_date 
+        SELECT id FROM purchases p2
+        WHERE p2.product_id = sb.product_id
+        AND p2.purchase_date <= sb.sale_date
         ORDER BY p2.purchase_date DESC LIMIT 1
     )
-    
+
     UNION ALL
-    
+
     -- Retail sales with profit
-    SELECT 
+    SELECT
         'Retail' as sale_type,
         sr.sale_date,
         p.name as product_name,
@@ -192,10 +195,10 @@ $current_week_sales = mysqli_query($conn, "
         COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * sr.pieces_sold, 0) as total_cost,
         (sr.total_amount - COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * sr.pieces_sold, 0)) as profit,
         ROUND(
-            CASE 
-                WHEN sr.total_amount > 0 
-                THEN ((sr.total_amount - COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * sr.pieces_sold, 0)) / sr.total_amount * 100) 
-                ELSE 0 
+            CASE
+                WHEN sr.total_amount > 0
+                THEN ((sr.total_amount - COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * sr.pieces_sold, 0)) / sr.total_amount * 100)
+                ELSE 0
             END, 2
         ) as margin,
         sr.customer_name
@@ -203,16 +206,29 @@ $current_week_sales = mysqli_query($conn, "
     JOIN products p ON sr.product_id = p.id
     LEFT JOIN purchases pu ON pu.product_id = sr.product_id
     LEFT JOIN stock s ON sr.product_id = s.product_id
-    WHERE sr.sale_date BETWEEN '" . date('Y-m-d', strtotime('monday this week')) . "' 
-        AND '" . date('Y-m-d', strtotime('sunday this week')) . "'
+    WHERE sr.sale_date BETWEEN '$filter_from' AND '$filter_to'
     AND pu.id = (
-        SELECT id FROM purchases p2 
-        WHERE p2.product_id = sr.product_id 
-        AND p2.purchase_date <= sr.sale_date 
+        SELECT id FROM purchases p2
+        WHERE p2.product_id = sr.product_id
+        AND p2.purchase_date <= sr.sale_date
         ORDER BY p2.purchase_date DESC LIMIT 1
     )
     ORDER BY sale_date DESC
 ");
+
+// Calculate filtered totals
+$filtered_revenue = 0;
+$filtered_cost = 0;
+$filtered_profit = 0;
+$filtered_sales_data = [];
+if ($current_week_sales && mysqli_num_rows($current_week_sales) > 0) {
+    while ($row = mysqli_fetch_assoc($current_week_sales)) {
+        $filtered_revenue += $row['total_amount'] ?? 0;
+        $filtered_cost += $row['total_cost'] ?? 0;
+        $filtered_profit += $row['profit'] ?? 0;
+        $filtered_sales_data[] = $row;
+    }
+}
 
 // Get product profitability analysis
 $product_profitability = mysqli_query($conn, "
@@ -315,6 +331,75 @@ $total_all_time = mysqli_fetch_assoc($total_all_time_query);
 // Calculate total cost and profit
 $total_all_time['total_cost'] = ($total_all_time['total_bulk_cost'] ?? 0) + ($total_all_time['total_retail_cost'] ?? 0);
 $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $total_all_time['total_cost'];
+
+// Daily revenue for current week (Sunday to Saturday)
+$week_sun = date('Y-m-d', strtotime('sunday last week'));
+$week_sat = date('Y-m-d', strtotime('saturday this week'));
+// If today is Sunday, adjust
+if (date('w') == 0) {
+    $week_sun = date('Y-m-d');
+    $week_sat = date('Y-m-d', strtotime('saturday next week'));
+}
+
+$daily_revenue_query = mysqli_query($conn, "
+    SELECT
+        dates.date,
+        DAYNAME(dates.date) as day_name,
+        COALESCE(bulk.revenue, 0) as bulk_revenue,
+        COALESCE(retail.revenue, 0) as retail_revenue,
+        COALESCE(bulk.revenue, 0) + COALESCE(retail.revenue, 0) as total_revenue,
+        COALESCE(bulk.cost, 0) + COALESCE(retail.cost, 0) as total_cost,
+        (COALESCE(bulk.revenue, 0) + COALESCE(retail.revenue, 0)) - (COALESCE(bulk.cost, 0) + COALESCE(retail.cost, 0)) as profit
+    FROM (
+        SELECT DATE('$week_sun') + INTERVAL seq DAY as date
+        FROM (SELECT 0 as seq UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) as s
+    ) as dates
+    LEFT JOIN (
+        SELECT sale_date,
+            SUM(total_amount) as revenue,
+            SUM(COALESCE((SELECT cost_price FROM purchases WHERE product_id = sb.product_id ORDER BY purchase_date DESC LIMIT 1), 0) * sb.quantity) as cost
+        FROM sales_bulk sb
+        GROUP BY sale_date
+    ) as bulk ON bulk.sale_date = dates.date
+    LEFT JOIN (
+        SELECT sale_date,
+            SUM(total_amount) as revenue,
+            SUM(COALESCE(
+                (SELECT cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu, stock s WHERE pu.product_id = sr.product_id AND s.product_id = sr.product_id ORDER BY pu.purchase_date DESC LIMIT 1), 0
+            ) * sr.pieces_sold) as cost
+        FROM sales_retail sr
+        GROUP BY sale_date
+    ) as retail ON retail.sale_date = dates.date
+    ORDER BY dates.date ASC
+");
+
+$daily_data = [];
+while ($row = mysqli_fetch_assoc($daily_revenue_query)) {
+    $daily_data[] = $row;
+}
+
+// Today's profit
+$today = date('Y-m-d');
+$today_profit_query = mysqli_query($conn, "
+    SELECT
+        COALESCE((SELECT SUM(total_amount) FROM sales_bulk WHERE sale_date = '$today'), 0) +
+        COALESCE((SELECT SUM(total_amount) FROM sales_retail WHERE sale_date = '$today'), 0) as today_sales,
+        COALESCE((
+            SELECT SUM(sb.total_amount - (COALESCE((SELECT cost_price FROM purchases WHERE product_id = sb.product_id ORDER BY purchase_date DESC LIMIT 1), 0) * sb.quantity))
+            FROM sales_bulk sb WHERE sb.sale_date = '$today'
+        ), 0) +
+        COALESCE((
+            SELECT SUM(sr.total_amount - (COALESCE(
+                (SELECT cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu, stock s WHERE pu.product_id = sr.product_id AND s.product_id = sr.product_id ORDER BY pu.purchase_date DESC LIMIT 1), 0
+            ) * sr.pieces_sold))
+            FROM sales_retail sr WHERE sr.sale_date = '$today'
+        ), 0) as today_profit
+");
+$today_data = mysqli_fetch_assoc($today_profit_query);
+$today_sales = $today_data['today_sales'] ?? 0;
+$today_profit = $today_data['today_profit'] ?? 0;
+$today_cost = $today_sales - $today_profit;
+$today_margin = $today_sales > 0 ? ($today_profit / $today_sales) * 100 : 0;
 ?>
 
 <!DOCTYPE html>
@@ -336,6 +421,26 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
             
             <!-- Current Week Profit Summary -->
             <div class="profit-summary">
+                <div class="profit-card">
+                    <h4>💵 Today's Profit</h4>
+                    <div class="profit-amount <?php echo $today_profit >= 0 ? 'profit-positive' : 'profit-negative'; ?>">
+                        RWF <?php echo number_format($today_profit, 0); ?>
+                    </div>
+                    <div class="profit-stats">
+                        <span>Sales: RWF <?php echo number_format($today_sales, 0); ?></span>
+                        <span>Cost: RWF <?php echo number_format($today_cost, 0); ?></span>
+                        <span>Margin:
+                            <span class="margin-badge <?php
+                                if($today_margin >= 30) echo 'margin-high';
+                                elseif($today_margin >= 15) echo 'margin-medium';
+                                else echo 'margin-low';
+                            ?>">
+                                <?php echo number_format($today_margin, 1); ?>%
+                            </span>
+                        </span>
+                    </div>
+                </div>
+
                 <div class="profit-card">
                     <h4>📊 This Week's Revenue</h4>
                     <div class="profit-amount">RWF <?php echo number_format($current_week['total_revenue'] ?? 0, 0); ?></div>
@@ -389,6 +494,13 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
                     </div>
                 </div>
             </div>
+             <!-- Daily Revenue Chart (Sun - Sat) -->
+            <div class="chart-container">
+                <h2>Daily Revenue (Sunday - Saturday)</h2>
+                <div class="chart-wrapper">
+                    <canvas id="dailyRevenueChart"></canvas>
+                </div>
+            </div>
             
             <!-- Revenue vs Cost Chart -->
             <div class="chart-container">
@@ -398,9 +510,27 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
                 </div>
             </div>
             
-            <!-- Current Week Detailed Sales with Profit -->
+           
+
+            <!-- Sales Profit Analysis with Date Filter -->
             <div class="revenue-table">
-                <h2>This Week's Sales - Profit Analysis</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">Sales - Profit Analysis</h2>
+                    <form method="GET" action="revenue.php" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <label style="font-size: 14px; color: #6c757d;">From:</label>
+                        <input type="date" name="from" value="<?php echo htmlspecialchars($filter_from); ?>"
+                            style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        <label style="font-size: 14px; color: #6c757d;">To:</label>
+                        <input type="date" name="to" value="<?php echo htmlspecialchars($filter_to); ?>"
+                            style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        <button type="submit" style="padding: 8px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">
+                            Filter
+                        </button>
+                        <a href="revenue.php" style="padding: 8px 16px; background: #f8f9fa; color: #6c757d; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; font-size: 14px;">
+                            Reset
+                        </a>
+                    </form>
+                </div>
                 <div class="table-responsive">
                     <table class="table comparison-table" id="tblProfit">
                         <thead>
@@ -419,12 +549,9 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
                             </tr>
                         </thead>
                         <tbody>
-                            <?php 
-                            $total_profit_display = 0;
-                            if ($current_week_sales && mysqli_num_rows($current_week_sales) > 0):
-                                while($sale = mysqli_fetch_assoc($current_week_sales)): 
+                            <?php if (!empty($filtered_sales_data)):
+                                foreach($filtered_sales_data as $sale):
                                     $profit_class = ($sale['profit'] ?? 0) >= 0 ? 'profit-positive' : 'profit-negative';
-                                    $total_profit_display += $sale['profit'] ?? 0;
                             ?>
                             <tr class="<?php echo ($sale['profit'] ?? 0) >= 0 ? 'highlight-profit' : 'highlight-loss'; ?>">
                                 <td><?php echo date('M d', strtotime($sale['sale_date'])); ?></td>
@@ -443,7 +570,7 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
                                     RWF <?php echo number_format($sale['profit'] ?? 0, 0); ?>
                                 </td>
                                 <td>
-                                    <span class="margin-badge <?php 
+                                    <span class="margin-badge <?php
                                         $margin_value = $sale['margin'] ?? 0;
                                         if($margin_value >= 30) echo 'margin-high';
                                         elseif($margin_value >= 15) echo 'margin-medium';
@@ -454,13 +581,13 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
                                 </td>
                                 <td><?php echo htmlspecialchars($sale['customer_name'] ?? 'N/A'); ?></td>
                             </tr>
-                            <?php 
-                                endwhile; 
-                            else: 
+                            <?php
+                                endforeach;
+                            else:
                             ?>
                             <tr>
                                 <td colspan="11" style="text-align: center; padding: 30px;">
-                                    No sales recorded this week
+                                    No sales found for the selected period
                                 </td>
                             </tr>
                             <?php endif; ?>
@@ -470,17 +597,17 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
                                 <td colspan="6"></td>
                                 <td class="revenue-value">Total Revenue</td>
                                 <td class="cost-value">Total Cost</td>
-                                <td class="<?php echo ($current_week['total_profit'] ?? 0) >= 0 ? 'profit-positive' : 'profit-negative'; ?>">
+                                <td class="<?php echo $filtered_profit >= 0 ? 'profit-positive' : 'profit-negative'; ?>">
                                     Total Profit
                                 </td>
                                 <td colspan="2"></td>
                             </tr>
                             <tr style="background: #f8f9fa; font-weight: bold;">
                                 <td colspan="6"></td>
-                                <td>RWF <?php echo number_format($current_week['total_revenue'] ?? 0, 0); ?></td>
-                                <td>RWF <?php echo number_format($current_week['total_cost'] ?? 0, 0); ?></td>
-                                <td class="<?php echo ($current_week['total_profit'] ?? 0) >= 0 ? 'profit-positive' : 'profit-negative'; ?>">
-                                    RWF <?php echo number_format($current_week['total_profit'] ?? 0, 0); ?>
+                                <td>RWF <?php echo number_format($filtered_revenue, 0); ?></td>
+                                <td>RWF <?php echo number_format($filtered_cost, 0); ?></td>
+                                <td class="<?php echo $filtered_profit >= 0 ? 'profit-positive' : 'profit-negative'; ?>">
+                                    RWF <?php echo number_format($filtered_profit, 0); ?>
                                 </td>
                                 <td colspan="2"></td>
                             </tr>
@@ -778,6 +905,115 @@ $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $tot
             initRevenueChart();
         }
         
+    })();
+
+    // Daily Revenue Chart (Sun - Sat)
+    (function() {
+        'use strict';
+
+        let dailyChart = null;
+
+        function initDailyRevenueChart() {
+            const canvas = document.getElementById('dailyRevenueChart');
+            if (!canvas) return;
+
+            if (dailyChart) {
+                dailyChart.destroy();
+                dailyChart = null;
+            }
+
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const dayLabels = [];
+            const revenueData = [];
+            const costData = [];
+            const profitData = [];
+
+            <?php foreach ($daily_data as $day): ?>
+                dayLabels.push('<?php echo $day['day_name']; ?>');
+                revenueData.push(<?php echo $day['total_revenue']; ?>);
+                costData.push(<?php echo $day['total_cost']; ?>);
+                profitData.push(<?php echo $day['profit']; ?>);
+            <?php endforeach; ?>
+
+            try {
+                dailyChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: dayLabels,
+                        datasets: [
+                            {
+                                label: 'Revenue',
+                                data: revenueData,
+                                backgroundColor: 'rgba(40, 167, 69, 0.7)',
+                                borderColor: 'rgba(40, 167, 69, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'Cost',
+                                data: costData,
+                                backgroundColor: 'rgba(220, 53, 69, 0.7)',
+                                borderColor: 'rgba(220, 53, 69, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'Profit',
+                                data: profitData,
+                                type: 'line',
+                                borderColor: 'rgba(102, 126, 234, 1)',
+                                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                                borderWidth: 3,
+                                pointRadius: 5,
+                                pointBackgroundColor: 'rgba(102, 126, 234, 1)',
+                                tension: 0.3,
+                                fill: true
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': RWF ' + context.parsed.y.toLocaleString();
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Amount (RWF)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return 'RWF ' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Daily revenue chart error:', e);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initDailyRevenueChart);
+        } else {
+            initDailyRevenueChart();
+        }
     })();
 </script>
     <script src="script.js"></script>
