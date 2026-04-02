@@ -9,11 +9,15 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <li><a href="purchases.php" <?php echo $current_page == 'purchases.php' ? 'class="active"' : ''; ?>>Purchases/Kurangura</a></li>
         <li><a href="sales.php" <?php echo $current_page == 'sales.php' ? 'class="active"' : ''; ?>>Sales/Gucuruza</a></li>
         <li><a href="stock.php" <?php echo $current_page == 'stock.php' ? 'class="active"' : ''; ?>>Stock Management</a></li>
-        
         <li><a href="suppliers.php" <?php echo $current_page == 'suppliers.php' ? 'class="active"' : ''; ?>>Suppliers</a></li>
-        <?php 
+        <li><a href="consumption.php" <?php echo $current_page == 'consumption.php' ? 'class="active"' : ''; ?>>Home Consumption</a></li>
+        <li><a href="expenses.php" <?php echo $current_page == 'expenses.php' ? 'class="active"' : ''; ?>>Expenses</a></li>
+        <li><a href="loans.php" <?php echo $current_page == 'loans.php' ? 'class="active"' : ''; ?>>Loans</a></li>
+          <li><a href="boaster.php" <?php echo $current_page == 'boaster.php' ? 'class="active"' : ''; ?>>Top Up</a></li>
+        <?php
         if( in_array($_SESSION['role'],['admin','manager'])){
-        ?> 
+        ?>
+        <li><a href="summary-revenue.php" <?php echo $current_page == 'summary-revenue.php' ? 'class="active"' : ''; ?>>Revenue Summary</a></li>
         <li><a href="revenue.php" <?php echo $current_page == 'revenue.php' ? 'class="active"' : ''; ?>>Profit Analysis</a></li>
         <li><a href="users.php" <?php echo $current_page == 'users.php' ? 'class="active"' : ''; ?>>Users</a></li>
       <?php 
@@ -21,9 +25,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
         ?> 
                 <li><a href="database.php" <?php echo $current_page == 'database.php' ? 'class="active"' : ''; ?>>Database</a></li>
         <?php } ?>
-        
-      
-      
         <?php } ?>
         <li><a href="logout.php">Logout</a></li>
     </ul>
