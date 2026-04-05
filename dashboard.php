@@ -152,67 +152,6 @@ $top_products_query = mysqli_query($conn, "
     LIMIT 5
 ");
 
-// Recent activities (last 10 transactions)
-$recent_activities = mysqli_query($conn, "
-    (SELECT 
-        'Bulk Sale' as type,
-        sb.sale_date as date,
-        p.name as product_name,
-        CONCAT(sb.quantity, ' packages') as quantity,
-        sb.total_amount as amount,
-        sb.customer_name as customer
-    FROM sales_bulk sb
-    JOIN products p ON sb.product_id = p.id
-    ORDER BY sb.created_at DESC LIMIT 5)
-    
-    UNION ALL
-    
-    (SELECT 
-        'Retail Sale' as type,
-        sr.sale_date as date,
-        p.name as product_name,
-        CONCAT(sr.pieces_sold, ' pieces') as quantity,
-        sr.total_amount as amount,
-        sr.customer_name as customer
-    FROM sales_retail sr
-    JOIN products p ON sr.product_id = p.id
-    ORDER BY sr.created_at DESC LIMIT 5)
-    
-    UNION ALL
-    
-    (SELECT 
-        'Purchase' as type,
-        p.purchase_date as date,
-        pr.name as product_name,
-        CONCAT(p.quantity, ' packages') as quantity,
-        p.cost_price * p.quantity as amount,
-        s.name as customer
-    FROM purchases p
-    JOIN products pr ON p.product_id = pr.id
-    LEFT JOIN suppliers s ON p.supplier_id = s.id
-    ORDER BY p.created_at DESC LIMIT 3)
-    
-    ORDER BY date DESC
-    LIMIT 10
-");
-
-// Top customers
-$top_customers = mysqli_query($conn, "
-    SELECT 
-        customer_name,
-        COUNT(*) as total_transactions,
-        SUM(total_amount) as total_spent,
-        MAX(sale_date) as last_purchase
-    FROM (
-        SELECT customer_name, total_amount, sale_date FROM sales_bulk WHERE customer_name IS NOT NULL AND customer_name != ''
-        UNION ALL
-        SELECT customer_name, total_amount, sale_date FROM sales_retail WHERE customer_name IS NOT NULL AND customer_name != ''
-    ) as all_sales
-    GROUP BY customer_name
-    ORDER BY total_spent DESC
-    LIMIT 5
-");
-
 // Stock movement summary
 $stock_movements_summary = mysqli_query($conn, "
     SELECT 
@@ -444,24 +383,36 @@ if (($today_sales['total'] ?? 0) == 0) {
             
             <!-- Alerts Section -->
             <?php if (!empty($alerts)): ?>
-            <div class="alerts-container" style="margin-bottom: 30px;">
-                <h3 style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
-                    <span>🔔 Notifications & Alerts</span>
-                    <span style="background: #667eea; color: white; padding: 2px 10px; border-radius: 20px; font-size: 12px;">
-                        <?php echo count($alerts); ?> new
+            <div class="alerts-container">
+                <h3 onclick="toggleAlerts()" style="cursor:pointer;user-select:none;">
+                    <span style="display:flex;align-items:center;gap:10px;">
+                        Notifications &amp; Alerts
+                        <span class="badge-count"><?php echo count($alerts); ?> new</span>
                     </span>
+                    <span id="alertsChevron" style="font-size:12px;color:var(--secondary);transition:transform .2s;">&#9654;</span>
                 </h3>
-                <?php foreach ($alerts as $alert): ?>
-                <div class="alert-item <?php echo $alert['type']; ?>">
-                    <div class="alert-icon"><?php echo $alert['icon']; ?></div>
-                    <div class="alert-content">
-                        <div class="alert-title"><?php echo $alert['title']; ?></div>
-                        <div class="alert-message"><?php echo $alert['message']; ?></div>
-                        <a href="<?php echo $alert['link']; ?>" class="alert-link">Take action →</a>
+                <div id="alertsBody" style="display:none;">
+                    <?php foreach ($alerts as $alert): ?>
+                    <div class="alert-item <?php echo $alert['type']; ?>">
+                        <div class="alert-icon"><?php echo $alert['icon']; ?></div>
+                        <div class="alert-content">
+                            <div class="alert-title"><?php echo $alert['title']; ?></div>
+                            <div class="alert-message"><?php echo $alert['message']; ?></div>
+                            <a href="<?php echo $alert['link']; ?>" class="alert-link">Take action →</a>
+                        </div>
                     </div>
+                    <?php endforeach; ?>
                 </div>
-                <?php endforeach; ?>
             </div>
+            <script>
+            function toggleAlerts() {
+                var body    = document.getElementById('alertsBody');
+                var chevron = document.getElementById('alertsChevron');
+                var open    = body.style.display !== 'none';
+                body.style.display    = open ? 'none' : 'block';
+                chevron.style.transform = open ? '' : 'rotate(90deg)';
+            }
+            </script>
             <?php endif; ?>
             
             <!-- Main Dashboard Row -->
@@ -480,354 +431,150 @@ if (($today_sales['total'] ?? 0) == 0) {
                 <!-- Quick Actions -->
                 <div>
                     <div class="chart-container" style="margin-bottom: 20px;">
-                        <h3 style="margin-bottom: 20px;">⚡ Quick Actions</h3>
+                        <h3>Quick Actions</h3>
                         <div class="quick-actions">
-                            <a href="sales.php" class="quick-action-btn">
-                                <span>💰</span>
-                                New Sale
-                            </a>
-                            <a href="purchases.php" class="quick-action-btn" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                                <span>📦</span>
-                                New Purchase
-                            </a>
-                            <a href="stock.php" class="quick-action-btn" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                                <span>🔄</span>
-                                Move Stock
-                            </a>
-                            <a href="products.php" class="quick-action-btn" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
-                                <span>🏷️</span>
-                                Add Product
-                            </a>
+                            <a href="sales.php" class="quick-action-btn"><span>💰</span>New Sale</a>
+                            <a href="purchases.php" class="quick-action-btn"><span>📦</span>Purchase</a>
+                            <a href="stock.php" class="quick-action-btn"><span>🔄</span>Move Stock</a>
+                            <a href="products.php" class="quick-action-btn"><span>🏷️</span>Add Product</a>
                         </div>
                     </div>
                     
                     <!-- Stock Health -->
                     <div class="chart-container">
-                        <h3 style="margin-bottom: 20px;">📦 Stock Health</h3>
+                        <h3>Stock Health</h3>
                         <?php if ($low_stock_count > 0): ?>
-                            <div style="margin-bottom: 20px;">
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                                    <span style="color: #6c757d;">Low Stock Items</span>
-                                    <span style="color: #dc3545; font-weight: bold;"><?php echo $low_stock_count; ?> products</span>
+                            <?php while($item = mysqli_fetch_assoc($low_stock_query)): ?>
+                            <div class="low-stock-item">
+                                <div>
+                                    <div class="low-stock-name"><?php echo htmlspecialchars($item['name']); ?></div>
+                                    <div class="low-stock-sub">Reorder at <?php echo $item['reorder_level']; ?></div>
                                 </div>
-                                <div style="background: #f8f9fa; border-radius: 10px; padding: 15px;">
-                                    <?php while($item = mysqli_fetch_assoc($low_stock_query)): ?>
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #dee2e6;">
-                                        <div>
-                                            <div style="font-weight: bold;"><?php echo htmlspecialchars($item['name']); ?></div>
-                                            <div style="font-size: 12px; color: #6c757d;">Reorder at: <?php echo $item['reorder_level']; ?></div>
-                                        </div>
-                                        <div>
-                                            <span style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 20px; font-size: 12px;">
-                                                <?php echo $item['quantity']; ?> left
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <?php endwhile; ?>
-                                </div>
+                                <span class="low-stock-badge"><?php echo $item['quantity']; ?> left</span>
                             </div>
+                            <?php endwhile; ?>
                         <?php else: ?>
-                            <div style="text-align: center; padding: 30px;">
-                                <span style="font-size: 50px; color: #28a745;">✓</span>
-                                <p style="color: #6c757d; margin-top: 10px;">All products are well stocked!</p>
+                            <div style="text-align:center;padding:24px 0;color:var(--success);">
+                                <div style="font-size:36px;">✓</div>
+                                <div style="font-size:13px;color:var(--secondary);margin-top:6px;">All products well stocked</div>
                             </div>
                         <?php endif; ?>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px;">
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center;">
-                                <div style="font-size: 24px; font-weight: bold; color: #667eea;"><?php echo number_format($movements['total_movements'] ?? 0); ?></div>
-                                <div style="font-size: 12px; color: #6c757d;">Stock Movements</div>
+                        <div class="mini-stats">
+                            <div class="mini-stat">
+                                <div class="mini-stat-value"><?php echo number_format($movements['total_movements'] ?? 0); ?></div>
+                                <div class="mini-stat-label">Movements this week</div>
                             </div>
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; text-align: center;">
-                                <div style="font-size: 24px; font-weight: bold; color: #28a745;"><?php echo number_format($total_suppliers); ?></div>
-                                <div style="font-size: 12px; color: #6c757d;">Active Suppliers</div>
+                            <div class="mini-stat">
+                                <div class="mini-stat-value" style="color:var(--success);"><?php echo number_format($total_suppliers); ?></div>
+                                <div class="mini-stat-label">Active Suppliers</div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- Second Dashboard Row -->
-            <div class="dashboard-row">
-                <!-- Top Products -->
+            <!-- Top Products -->
+            <div style="margin-bottom:24px;">
                 <div class="chart-container">
-                    <h3 style="margin-bottom: 20px;">🏆 Top Selling Products</h3>
-                    <div style="overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse;">
+                    <h3>Top Selling Products</h3>
+                    <div style="overflow-x:auto;">
+                        <table class="top-table">
                             <thead>
-                                <tr style="border-bottom: 2px solid #eee;">
-                                    <th style="text-align: left; padding: 12px 5px;">Product</th>
-                                    <th style="text-align: center; padding: 12px 5px;">Category</th>
-                                    <th style="text-align: center; padding: 12px 5px;">Bulk</th>
-                                    <th style="text-align: center; padding: 12px 5px;">Retail</th>
-                                    <th style="text-align: right; padding: 12px 5px;">Revenue</th>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th style="text-align:center;">Bulk</th>
+                                    <th style="text-align:center;">Retail</th>
+                                    <th style="text-align:right;">Revenue</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (mysqli_num_rows($top_products_query) > 0): ?>
                                     <?php while($product = mysqli_fetch_assoc($top_products_query)): ?>
-                                    <tr style="border-bottom: 1px solid #eee;">
-                                        <td style="padding: 12px 5px; font-weight: bold;"><?php echo htmlspecialchars($product['name']); ?></td>
-                                        <td style="padding: 12px 5px; text-align: center;">
-                                            <span style="background: #e9ecef; padding: 3px 10px; border-radius: 20px; font-size: 12px;">
-                                                <?php echo htmlspecialchars($product['category'] ?: 'N/A'); ?>
-                                            </span>
-                                        </td>
-                                        <td style="padding: 12px 5px; text-align: center;"><?php echo $product['bulk_quantity']; ?> pkg</td>
-                                        <td style="padding: 12px 5px; text-align: center;"><?php echo $product['retail_quantity']; ?> pcs</td>
-                                        <td style="padding: 12px 5px; text-align: right; font-weight: bold; color: #28a745;">
-                                            RWF <?php echo number_format($product['total_revenue'], 0); ?>
-                                        </td>
+                                    <tr>
+                                        <td style="font-weight:600;"><?php echo htmlspecialchars($product['name']); ?></td>
+                                        <td><span class="cat-badge"><?php echo htmlspecialchars($product['category'] ?: 'N/A'); ?></span></td>
+                                        <td style="text-align:center;color:var(--secondary);"><?php echo $product['bulk_quantity']; ?> pkg</td>
+                                        <td style="text-align:center;color:var(--secondary);"><?php echo $product['retail_quantity']; ?> pcs</td>
+                                        <td style="text-align:right;font-weight:700;color:var(--success);">RWF <?php echo number_format($product['total_revenue'], 0); ?></td>
                                     </tr>
                                     <?php endwhile; ?>
                                 <?php else: ?>
-                                    <tr>
-                                        <td colspan="5" style="padding: 30px; text-align: center; color: #6c757d;">
-                                            No sales data available yet
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="5" style="padding:30px;text-align:center;color:var(--secondary);">No sales data yet</td></tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
                 </div>
                 
-                <!-- Top Customers -->
-                <div class="chart-container">
-                    <h3 style="margin-bottom: 20px;">👥 Top Customers</h3>
-                    <div style="overflow-x: auto;">
-                        <?php if (mysqli_num_rows($top_customers) > 0): ?>
-                            <?php while($customer = mysqli_fetch_assoc($top_customers)): ?>
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid #eee;">
-                                <div>
-                                    <div style="font-weight: bold;"><?php echo htmlspecialchars($customer['customer_name']); ?></div>
-                                    <div style="font-size: 11px; color: #6c757d;">
-                                        <?php echo $customer['total_transactions']; ?> transactions
-                                    </div>
-                                </div>
-                                <div style="text-align: right;">
-                                    <div style="font-weight: bold; color: #667eea;">
-                                        RWF <?php echo number_format($customer['total_spent'], 0); ?>
-                                    </div>
-                                    <div style="font-size: 11px; color: #6c757d;">
-                                        Last: <?php echo date('M d', strtotime($customer['last_purchase'])); ?>
-                                    </div>
-                                </div>
-                            </div>
-                            <?php endwhile; ?>
-                        <?php else: ?>
-                            <div style="text-align: center; padding: 30px; color: #6c757d;">
-                                No customer data available
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Recent Activities -->
-            <div class="recent-activities">
-                <h3 style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-                    <span>📋 Recent Activities</span>
-                    <span style="background: #f8f9fa; padding: 5px 15px; border-radius: 20px; font-size: 13px; color: #6c757d;">
-                        Last 10 transactions
-                    </span>
-                </h3>
-                <div class="activity-timeline">
-                    <?php if (mysqli_num_rows($recent_activities) > 0): ?>
-                        <?php while($activity = mysqli_fetch_assoc($recent_activities)): 
-                            $badge_class = '';
-                            $badge_icon = '';
-                            if ($activity['type'] == 'Bulk Sale') {
-                                $badge_class = 'badge-bulk';
-                                $badge_icon = '📦';
-                            } elseif ($activity['type'] == 'Retail Sale') {
-                                $badge_class = 'badge-retail';
-                                $badge_icon = '🛍️';
-                            } else {
-                                $badge_class = 'badge-purchase';
-                                $badge_icon = '📥';
-                            }
-                        ?>
-                        <div class="activity-item">
-                            <div class="activity-badge <?php echo $badge_class; ?>">
-                                <?php echo $badge_icon; ?>
-                            </div>
-                            <div class="activity-details">
-                                <div class="activity-title">
-                                    <?php echo $activity['type']; ?> - <?php echo htmlspecialchars($activity['product_name']); ?>
-                                </div>
-                                <div class="activity-meta">
-                                    <span>📅 <?php echo date('M d, H:i', strtotime($activity['date'])); ?></span>
-                                    <span>📊 <?php echo $activity['quantity']; ?></span>
-                                    <?php if (!empty($activity['customer']) && $activity['customer'] != 'N/A'): ?>
-                                        <span>👤 <?php echo htmlspecialchars($activity['customer']); ?></span>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                            <div class="activity-amount">
-                                RWF <?php echo number_format($activity['amount'], 0); ?>
-                            </div>
-                        </div>
-                        <?php endwhile; ?>
-                    <?php else: ?>
-                        <div style="text-align: center; padding: 40px; color: #6c757d;">
-                            <span style="font-size: 50px; display: block; margin-bottom: 20px;">📭</span>
-                            No recent activities found
-                        </div>
-                    <?php endif; ?>
-                </div>
             </div>
             
             <!-- Business Performance Summary -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px;">
-                <div style="background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
-                    <h4 style="margin-bottom: 15px; color: #333;">📈 Performance Summary</h4>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <div style="font-size: 12px; color: #6c757d;">Avg. Daily Sales</div>
-                            <div style="font-size: 20px; font-weight: bold; color: #333;">
-                                RWF <?php 
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px;">
+                <div class="perf-box">
+                    <h4>Performance Summary</h4>
+                    <div class="perf-grid">
+                        <div class="perf-item">
+                            <div class="perf-item-label">Avg. Daily Sales</div>
+                            <div class="perf-item-value">RWF <?php
                                 $avg_daily = mysqli_fetch_assoc(mysqli_query($conn, "
-                                    SELECT AVG(daily_total) as avg_sales
-                                    FROM (
-                                        SELECT sale_date, SUM(total_amount) as daily_total
-                                        FROM (
+                                    SELECT AVG(daily_total) as avg_sales FROM (
+                                        SELECT sale_date, SUM(total_amount) as daily_total FROM (
                                             SELECT sale_date, total_amount FROM sales_bulk
-                                            UNION ALL
-                                            SELECT sale_date, total_amount FROM sales_retail
-                                        ) as all_sales
-                                        GROUP BY sale_date
-                                        ORDER BY sale_date DESC
-                                        LIMIT 30
-                                    ) as last_30_days
-                                "));
-                                echo number_format($avg_daily['avg_sales'] ?? 0, 0);
-                                ?>
-                            </div>
+                                            UNION ALL SELECT sale_date, total_amount FROM sales_retail
+                                        ) as s GROUP BY sale_date ORDER BY sale_date DESC LIMIT 30
+                                    ) as t"));
+                                echo number_format($avg_daily['avg_sales'] ?? 0, 0); ?></div>
                         </div>
-                        <div>
-                            <div style="font-size: 12px; color: #6c757d;">Best Selling Day</div>
-                            <div style="font-size: 20px; font-weight: bold; color: #333;">
-                                <?php 
+                        <div class="perf-item">
+                            <div class="perf-item-label">Best Day</div>
+                            <div class="perf-item-value"><?php
                                 $best_day = mysqli_fetch_assoc(mysqli_query($conn, "
-                                    SELECT DAYNAME(sale_date) as day_name, COUNT(*) as sales_count
-                                    FROM (
-                                        SELECT sale_date FROM sales_bulk
-                                        UNION ALL
-                                        SELECT sale_date FROM sales_retail
-                                    ) as all_sales
-                                    GROUP BY DAYOFWEEK(sale_date)
-                                    ORDER BY sales_count DESC
-                                    LIMIT 1
-                                "));
-                                echo $best_day['day_name'] ?? 'N/A';
-                                ?>
-                            </div>
+                                    SELECT DAYNAME(sale_date) as day_name, COUNT(*) as c FROM (
+                                        SELECT sale_date FROM sales_bulk UNION ALL SELECT sale_date FROM sales_retail
+                                    ) as s GROUP BY DAYOFWEEK(sale_date) ORDER BY c DESC LIMIT 1"));
+                                echo $best_day['day_name'] ?? 'N/A'; ?></div>
                         </div>
-                        <div>
-                            <div style="font-size: 12px; color: #6c757d;">Total Transactions</div>
-                            <div style="font-size: 20px; font-weight: bold; color: #333;">
-                                <?php 
-                                $total_trans = mysqli_fetch_assoc(mysqli_query($conn, "
-                                    SELECT 
-                                        (SELECT COUNT(*) FROM sales_bulk) +
-                                        (SELECT COUNT(*) FROM sales_retail) as total
-                                "));
-                                echo number_format($total_trans['total'] ?? 0);
-                                ?>
-                            </div>
+                        <div class="perf-item">
+                            <div class="perf-item-label">Total Transactions</div>
+                            <div class="perf-item-value"><?php
+                                $total_trans = mysqli_fetch_assoc(mysqli_query($conn, "SELECT (SELECT COUNT(*) FROM sales_bulk)+(SELECT COUNT(*) FROM sales_retail) as total"));
+                                echo number_format($total_trans['total'] ?? 0); ?></div>
                         </div>
-                        <div>
-                            <div style="font-size: 12px; color: #6c757d;">Stock Turnover</div>
-                            <div style="font-size: 20px; font-weight: bold; color: #333;">
-                                <?php 
-                                $turnover = mysqli_fetch_assoc(mysqli_query($conn, "
-                                    SELECT 
-                                        COALESCE(SUM(sb.quantity), 0) + COALESCE(SUM(sr.pieces_sold), 0) as total_sold,
-                                        COALESCE((SELECT SUM(quantity) FROM stock), 1) as total_stock
-                                    FROM products p
-                                    LEFT JOIN sales_bulk sb ON p.id = sb.product_id
-                                    LEFT JOIN sales_retail sr ON p.id = sr.product_id
-                                "));
-                                $turnover_rate = $turnover['total_stock'] > 0 ? 
-                                    ($turnover['total_sold'] / $turnover['total_stock']) * 100 : 0;
-                                echo number_format($turnover_rate, 0) . '%';
-                                ?>
-                            </div>
+                        <div class="perf-item">
+                            <div class="perf-item-label">Stock Turnover</div>
+                            <div class="perf-item-value"><?php
+                                $turnover = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(sb.quantity),0)+COALESCE(SUM(sr.pieces_sold),0) as sold, COALESCE((SELECT SUM(quantity) FROM stock),1) as stk FROM products p LEFT JOIN sales_bulk sb ON p.id=sb.product_id LEFT JOIN sales_retail sr ON p.id=sr.product_id"));
+                                echo number_format($turnover['stk'] > 0 ? ($turnover['sold']/$turnover['stk'])*100 : 0, 0) . '%'; ?></div>
                         </div>
                     </div>
                 </div>
-                
-                <div style="background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.05);">
-                    <h4 style="margin-bottom: 15px; color: #333;">🎯 Quick Insights</h4>
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #6c757d;">Bulk vs Retail Ratio</span>
-                            <span style="font-weight: bold;">
-                                <?php 
-                                $total_bulk = mysqli_fetch_assoc(mysqli_query($conn, "SELECT SUM(total_amount) as total FROM sales_bulk"))['total'] ?? 0;
-                                $total_retail = mysqli_fetch_assoc(mysqli_query($conn, "SELECT SUM(total_amount) as total FROM sales_retail"))['total'] ?? 0;
-                                $total_all = $total_bulk + $total_retail;
-                                if ($total_all > 0) {
-                                    echo number_format(($total_bulk / $total_all) * 100, 0) . '% Bulk / ';
-                                    echo number_format(($total_retail / $total_all) * 100, 0) . '% Retail';
-                                } else {
-                                    echo 'No data';
-                                }
-                                ?>
-                            </span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #6c757d;">Average Transaction Value</span>
-                            <span style="font-weight: bold;">
-                                RWF <?php 
-                                $avg_trans = mysqli_fetch_assoc(mysqli_query($conn, "
-                                    SELECT AVG(amount) as avg_amount
-                                    FROM (
-                                        SELECT total_amount as amount FROM sales_bulk
-                                        UNION ALL
-                                        SELECT total_amount as amount FROM sales_retail
-                                    ) as all_sales
-                                "));
-                                echo number_format($avg_trans['avg_amount'] ?? 0, 0);
-                                ?>
-                            </span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #6c757d;">Most Active Hour</span>
-                            <span style="font-weight: bold;">
-                                <?php 
-                                $peak_hour = mysqli_fetch_assoc(mysqli_query($conn, "
-                                    SELECT HOUR(created_at) as hour, COUNT(*) as count
-                                    FROM (
-                                        SELECT created_at FROM sales_bulk
-                                        UNION ALL
-                                        SELECT created_at FROM sales_retail
-                                    ) as all_sales
-                                    GROUP BY HOUR(created_at)
-                                    ORDER BY count DESC
-                                    LIMIT 1
-                                "));
-                                echo $peak_hour ? date('g A', strtotime($peak_hour['hour'] . ':00')) : 'N/A';
-                                ?>
-                            </span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: #6c757d;">Products per Sale</span>
-                            <span style="font-weight: bold;">
-                                <?php 
-                                $avg_items = mysqli_fetch_assoc(mysqli_query($conn, "
-                                    SELECT AVG(items) as avg_items
-                                    FROM (
-                                        SELECT quantity as items FROM sales_bulk
-                                        UNION ALL
-                                        SELECT pieces_sold as items FROM sales_retail
-                                    ) as all_items
-                                "));
-                                echo number_format($avg_items['avg_items'] ?? 0, 1);
-                                ?>
-                            </span>
-                        </div>
+
+                <div class="perf-box">
+                    <h4>Quick Insights</h4>
+                    <?php
+                    $total_bulk_all   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0) as t FROM sales_bulk"))['t'] ?? 0;
+                    $total_retail_all = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0) as t FROM sales_retail"))['t'] ?? 0;
+                    $total_all = $total_bulk_all + $total_retail_all;
+                    $avg_trans = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(amount) as a FROM (SELECT total_amount as amount FROM sales_bulk UNION ALL SELECT total_amount FROM sales_retail) as s"));
+                    $peak_hour = mysqli_fetch_assoc(mysqli_query($conn, "SELECT HOUR(created_at) as h, COUNT(*) as c FROM (SELECT created_at FROM sales_bulk UNION ALL SELECT created_at FROM sales_retail) as s GROUP BY h ORDER BY c DESC LIMIT 1"));
+                    $avg_items = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(items) as a FROM (SELECT quantity as items FROM sales_bulk UNION ALL SELECT pieces_sold FROM sales_retail) as s"));
+                    ?>
+                    <div class="insight-row">
+                        <span class="insight-label">Bulk vs Retail</span>
+                        <span class="insight-value"><?php echo $total_all > 0 ? number_format(($total_bulk_all/$total_all)*100,0).'% / '.number_format(($total_retail_all/$total_all)*100,0).'%' : 'N/A'; ?></span>
+                    </div>
+                    <div class="insight-row">
+                        <span class="insight-label">Avg. Transaction</span>
+                        <span class="insight-value">RWF <?php echo number_format($avg_trans['a'] ?? 0, 0); ?></span>
+                    </div>
+                    <div class="insight-row">
+                        <span class="insight-label">Peak Hour</span>
+                        <span class="insight-value"><?php echo $peak_hour ? date('g A', strtotime($peak_hour['h'].':00')) : 'N/A'; ?></span>
+                    </div>
+                    <div class="insight-row">
+                        <span class="insight-label">Items per Sale</span>
+                        <span class="insight-value"><?php echo number_format($avg_items['a'] ?? 0, 1); ?></span>
                     </div>
                 </div>
             </div>
