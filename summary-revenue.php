@@ -54,20 +54,23 @@ if (mysqli_num_rows($exp_check) > 0) {
 // ── Consumption total ──────────────────────────────────────────────────────────
 $con_check = mysqli_query($conn, "SHOW TABLES LIKE 'consumption'");
 $total_consumption = 0;
+$total_consumption_unpaid = 0;
 if (mysqli_num_rows($con_check) > 0) {
     $con = mysqli_fetch_assoc(mysqli_query($conn, "
-        SELECT COALESCE(SUM(amount), 0) AS total
+        SELECT COALESCE(SUM(amount), 0)                          AS total,
+               COALESCE(SUM(amount - paid_amount), 0)            AS unpaid
         FROM consumption
         WHERE consumption_date BETWEEN '$from' AND '$to'
     "));
-    $total_consumption = $con['total'];
+    $total_consumption        = $con['total'];
+    $total_consumption_unpaid = $con['unpaid'];
 }
 
 // ── Derived totals ─────────────────────────────────────────────────────────────
 $total_revenue      = $bulk['revenue']  + $retail['revenue'];
 $total_cost         = $bulk['cost']     + $retail['cost'];
 $gross_profit       = $total_revenue    - $total_cost;
-$net_profit         = $gross_profit     - $total_expenses - $total_consumption;
+$net_profit         = $gross_profit     - $total_expenses - $total_consumption_unpaid;
 $profit_margin      = $total_revenue > 0 ? round(($gross_profit / $total_revenue) * 100, 1) : 0;
 $net_margin         = $total_revenue > 0 ? round(($net_profit   / $total_revenue) * 100, 1) : 0;
 
@@ -102,14 +105,20 @@ if (mysqli_num_rows($exp_check) > 0) {
 }
 
 $daily_con = [];
+$daily_con_unpaid = [];
 if (mysqli_num_rows($con_check) > 0) {
     $con_daily_q = mysqli_query($conn, "
-        SELECT consumption_date AS d, SUM(amount) AS total
+        SELECT consumption_date AS d,
+               SUM(amount) AS total,
+               SUM(amount - paid_amount) AS unpaid
         FROM consumption
         WHERE consumption_date BETWEEN '$from' AND '$to'
         GROUP BY consumption_date
     ");
-    while ($r = mysqli_fetch_assoc($con_daily_q)) $daily_con[$r['d']] = $r['total'];
+    while ($r = mysqli_fetch_assoc($con_daily_q)) {
+        $daily_con[$r['d']]        = $r['total'];
+        $daily_con_unpaid[$r['d']] = $r['unpaid'];
+    }
 }
 
 // Merge all dates
@@ -216,6 +225,10 @@ rsort($all_dates); // newest first
             <div class="summary-card orange">
                 <label>Consumption</label>
                 <div class="val">RWF <?php echo number_format($total_consumption, 0); ?></div>
+                <div class="sub" style="color:var(--danger);font-weight:600;">
+                    Unpaid: RWF <?php echo number_format($total_consumption_unpaid, 0); ?>
+                </div>
+                <div class="sub">Paid: RWF <?php echo number_format($total_consumption - $total_consumption_unpaid, 0); ?></div>
             </div>
             <div class="summary-card purple">
                 <label>Net Profit</label>
@@ -238,23 +251,26 @@ rsort($all_dates); // newest first
                         <th>Total Revenue</th>
                         <th>Expenses</th>
                         <th>Consumption</th>
+                        <th>Con. Unpaid</th>
                         <th>Net</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php
-                $gt_bulk = $gt_retail = $gt_exp = $gt_con = 0;
+                $gt_bulk = $gt_retail = $gt_exp = $gt_con = $gt_con_unpaid = 0;
                 foreach ($all_dates as $d):
-                    $d_bulk   = $daily_bulk[$d]   ?? 0;
-                    $d_retail = $daily_retail[$d]  ?? 0;
-                    $d_exp    = $daily_exp[$d]     ?? 0;
-                    $d_con    = $daily_con[$d]     ?? 0;
-                    $d_rev    = $d_bulk + $d_retail;
-                    $d_net    = $d_rev  - $d_exp - $d_con;
-                    $gt_bulk   += $d_bulk;
-                    $gt_retail += $d_retail;
-                    $gt_exp    += $d_exp;
-                    $gt_con    += $d_con;
+                    $d_bulk       = $daily_bulk[$d]       ?? 0;
+                    $d_retail     = $daily_retail[$d]      ?? 0;
+                    $d_exp        = $daily_exp[$d]         ?? 0;
+                    $d_con        = $daily_con[$d]         ?? 0;
+                    $d_con_unpaid = $daily_con_unpaid[$d]  ?? 0;
+                    $d_rev        = $d_bulk + $d_retail;
+                    $d_net        = $d_rev  - $d_exp - $d_con_unpaid;
+                    $gt_bulk       += $d_bulk;
+                    $gt_retail     += $d_retail;
+                    $gt_exp        += $d_exp;
+                    $gt_con        += $d_con;
+                    $gt_con_unpaid += $d_con_unpaid;
                 ?>
                 <tr>
                     <td><?php echo date('D, M d', strtotime($d)); ?></td>
@@ -263,6 +279,9 @@ rsort($all_dates); // newest first
                     <td><strong>RWF <?php echo number_format($d_rev, 0); ?></strong></td>
                     <td><?php echo $d_exp ? 'RWF ' . number_format($d_exp, 0) : '-'; ?></td>
                     <td><?php echo $d_con ? 'RWF ' . number_format($d_con, 0) : '-'; ?></td>
+                    <td style="<?php echo $d_con_unpaid > 0 ? 'color:var(--danger);font-weight:600;' : 'color:var(--secondary);'; ?>">
+                        <?php echo $d_con_unpaid > 0 ? 'RWF ' . number_format($d_con_unpaid, 0) : '-'; ?>
+                    </td>
                     <td style="color:<?php echo $d_net >= 0 ? 'var(--success)' : 'var(--danger)'; ?>;font-weight:600;">
                         RWF <?php echo number_format($d_net, 0); ?>
                     </td>
@@ -277,6 +296,9 @@ rsort($all_dates); // newest first
                         <td>RWF <?php echo number_format($gt_bulk + $gt_retail, 0); ?></td>
                         <td>RWF <?php echo number_format($gt_exp, 0); ?></td>
                         <td>RWF <?php echo number_format($gt_con, 0); ?></td>
+                        <td style="<?php echo $gt_con_unpaid > 0 ? 'color:var(--danger);font-weight:600;' : ''; ?>">
+                            <?php echo $gt_con_unpaid > 0 ? 'RWF ' . number_format($gt_con_unpaid, 0) : '-'; ?>
+                        </td>
                         <td style="color:<?php echo $net_profit >= 0 ? 'var(--success)' : 'var(--danger)'; ?>">
                             RWF <?php echo number_format($net_profit, 0); ?>
                         </td>

@@ -85,68 +85,11 @@ body {
     background: var(--gray-100);
 }
 
-.sidebar {
-    width: 280px;
-    background: var(--white);
-    color: var(--dark);
-    padding: 24px 0;
-    position: fixed;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: var(--shadow-md);
-    border-right: 1px solid var(--gray-200);
-}
-
-.sidebar h2 {
-    padding: 0 24px;
-    margin-bottom: 32px;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--primary);
-    letter-spacing: -0.5px;
-}
-
-.nav-menu {
-    list-style: none;
-    flex: 1;
-    overflow-y: auto;
-}
-
-.nav-menu li {
-    margin-bottom: 4px;
-}
-
-.nav-menu a {
-    display: block;
-    padding: 12px 24px;
-    color: var(--gray-600);
-    text-decoration: none;
-    transition: all 0.2s;
-    font-weight: 500;
-    border-left: 3px solid transparent;
-}
-
-.nav-menu a:hover,
-.nav-menu a.active {
-    background: var(--gray-100);
-    color: var(--primary);
-    border-left-color: var(--primary);
-}
-
-.user-info {
-    flex-shrink: 0;
-    margin: 16px 24px 24px;
-    color: var(--gray-600);
-    font-size: 14px;
-    padding: 16px;
-    background: var(--gray-100);
-    border-radius: 12px;
-}
+/* sidebar styles are now in sidebar.php */
 
 .main-content {
     flex: 1;
-    margin-left: 280px;
+    margin-left: 240px;
     padding: 32px;
     background: var(--white);
 }
