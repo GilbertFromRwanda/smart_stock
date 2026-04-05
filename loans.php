@@ -61,6 +61,87 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_payment'])) {
     header('Content-Type: application/json'); echo json_encode($ins ? ['success' => true] : ['success' => false, 'message' => mysqli_error($conn)]); exit;
 }
 
+// ── AJAX: Preview Global Loan Payment ─────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['preview_global_loan_payment'])) {
+    $total         = (float)$_POST['total_amount'];
+    $client_filter = mysqli_real_escape_string($conn, trim($_POST['client_filter'] ?? ''));
+
+    $having = "balance > 0";
+    $client_where = $client_filter ? "AND l.client LIKE '%$client_filter%'" : "";
+
+    $unpaid = mysqli_query($conn, "
+        SELECT l.id, p.name AS product_name, p.category, l.client,
+               l.loan_date, l.amount,
+               COALESCE(lp_sum.paid, 0) AS total_paid,
+               (l.amount - COALESCE(lp_sum.paid, 0)) AS balance
+        FROM loans l
+        JOIN products p ON p.id = l.product_id
+        LEFT JOIN (SELECT loan_id, SUM(amount_paid) AS paid FROM loan_payments GROUP BY loan_id) lp_sum ON lp_sum.loan_id = l.id
+        WHERE l.amount > COALESCE(lp_sum.paid, 0) $client_where
+        ORDER BY l.loan_date ASC, l.id ASC
+    ");
+
+    $remaining = $total;
+    $rows = [];
+    $total_outstanding = 0;
+
+    while ($row = mysqli_fetch_assoc($unpaid)) {
+        $total_outstanding += $row['balance'];
+        if ($remaining > 0) {
+            $pay = min($remaining, $row['balance']);
+            $rows[] = ['id' => $row['id'], 'label' => $row['category'].'-'.$row['product_name'],
+                'client' => $row['client'], 'date' => date('M d', strtotime($row['loan_date'])),
+                'balance' => $row['balance'], 'will_pay' => $pay, 'full' => ($pay >= $row['balance'])];
+            $remaining -= $pay;
+        } else {
+            $rows[] = ['id' => $row['id'], 'label' => $row['category'].'-'.$row['product_name'],
+                'client' => $row['client'], 'date' => date('M d', strtotime($row['loan_date'])),
+                'balance' => $row['balance'], 'will_pay' => 0, 'full' => false];
+        }
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['rows' => $rows, 'total_outstanding' => $total_outstanding, 'leftover' => max(0, $remaining)]);
+    exit;
+}
+
+// ── AJAX: Execute Global Loan Payment ─────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['exec_global_loan_payment'])) {
+    $total         = (float)mysqli_real_escape_string($conn, $_POST['total_amount']);
+    $client_filter = mysqli_real_escape_string($conn, trim($_POST['client_filter'] ?? ''));
+    $payment_date  = date('Y-m-d');
+
+    if ($total <= 0) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Amount must be greater than 0.']);
+        exit;
+    }
+
+    $client_where = $client_filter ? "AND l.client LIKE '%$client_filter%'" : "";
+
+    $unpaid = mysqli_query($conn, "
+        SELECT l.id, l.amount,
+               COALESCE(lp_sum.paid, 0) AS total_paid,
+               (l.amount - COALESCE(lp_sum.paid, 0)) AS balance
+        FROM loans l
+        LEFT JOIN (SELECT loan_id, SUM(amount_paid) AS paid FROM loan_payments GROUP BY loan_id) lp_sum ON lp_sum.loan_id = l.id
+        WHERE l.amount > COALESCE(lp_sum.paid, 0) $client_where
+        ORDER BY l.loan_date ASC, l.id ASC
+    ");
+
+    $remaining = $total;
+    $count = 0;
+    while ($row = mysqli_fetch_assoc($unpaid)) {
+        if ($remaining <= 0) break;
+        $pay = min($remaining, (float)$row['balance']);
+        mysqli_query($conn, "INSERT INTO loan_payments (loan_id, amount_paid, payment_date) VALUES ({$row['id']}, $pay, '$payment_date')");
+        $remaining -= $pay;
+        $count++;
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['success' => true, 'count' => $count, 'applied' => $total - $remaining]);
+    exit;
+}
+
 // ── Delete Loan ────────────────────────────────────────────────────────────────
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $del_id = (int)$_GET['delete'];
@@ -158,7 +239,15 @@ $stats_outstanding = $stats['total_amount'] - $stats['total_paid'];
         <!-- Header -->
         <div class="loans-header">
             <h1>Loans</h1>
-            <button onclick="openModal('addLoanModal')" class="btn btn-primary">+ New Loan</button>
+            <div style="display:flex;gap:10px;">
+                <?php if ($stats_outstanding > 0): ?>
+                <button onclick="openGlobalLoanPay()" class="btn btn-secondary"
+                    style="border-color:var(--warning);color:var(--warning);font-weight:600;">
+                    Global Pay &nbsp;<span style="background:var(--warning);color:#fff;border-radius:99px;padding:1px 8px;font-size:12px;">RWF <?php echo number_format($stats_outstanding, 0); ?></span>
+                </button>
+                <?php endif; ?>
+                <button onclick="openModal('addLoanModal')" class="btn btn-primary">+ New Loan</button>
+            </div>
         </div>
 
         <!-- Summary cards -->
@@ -196,7 +285,7 @@ $stats_outstanding = $stats['total_amount'] - $stats['total_paid'];
             </div>
             <div class="filter-group">
                 <label>Client Name</label>
-                <input type="text" name="name" value="<?php echo htmlspecialchars($name_filter); ?>" placeholder="Search name...">
+                <input type="text" id="liveClientSearch" name="name" value="<?php echo htmlspecialchars($name_filter); ?>" placeholder="Search name..." autocomplete="off">
             </div>
             <button type="submit" class="btn btn-primary">Filter</button>
             <?php if ($date_from || $date_to || $name_filter): ?>
@@ -207,77 +296,218 @@ $stats_outstanding = $stats['total_amount'] - $stats['total_paid'];
         <div id="pageAlert" class="alert" style="display:none;"></div>
         <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 
-        <!-- Table -->
-        <div class="loans-table-wrap">
-            <table class="table" id="tblLoans">
-                <thead>
+        <!-- Client folder cards -->
+        <?php
+        // Group all records by client
+        $clients_data = [];
+        $grand_amount = 0; $grand_paid = 0;
+        while ($row = mysqli_fetch_assoc($records)) {
+            $c = $row['client'];
+            if (!isset($clients_data[$c])) {
+                $clients_data[$c] = ['phone' => $row['phone'], 'total_amount' => 0, 'total_paid' => 0, 'loans' => []];
+            }
+            $clients_data[$c]['total_amount'] += $row['amount'];
+            $clients_data[$c]['total_paid']   += $row['total_paid'];
+            $clients_data[$c]['loans'][]       = $row;
+            $grand_amount += $row['amount'];
+            $grand_paid   += $row['total_paid'];
+        }
+        // Sort by outstanding desc
+        uasort($clients_data, function($a, $b) {
+            return ($b['total_amount'] - $b['total_paid']) - ($a['total_amount'] - $a['total_paid']);
+        });
+        ?>
+
+        <style>
+        .client-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .client-folder {
+            background: var(--white); border-radius: 14px; border: 1px solid var(--gray-200);
+            box-shadow: var(--shadow-sm); overflow: hidden; cursor: pointer;
+            transition: box-shadow .15s, border-color .15s;
+        }
+        .client-folder:hover { box-shadow: var(--shadow-md); border-color: var(--primary); }
+        .client-folder-header {
+            display: flex; align-items: center; gap: 14px; padding: 16px 18px;
+            border-top: 4px solid var(--primary);
+        }
+        .client-folder.fully-paid .client-folder-header { border-top-color: var(--success); }
+        .client-folder.partial .client-folder-header    { border-top-color: var(--warning); }
+        .client-folder-icon {
+            font-size: 28px; flex-shrink: 0; line-height: 1;
+        }
+        .client-folder-info { flex: 1; min-width: 0; }
+        .client-folder-name { font-size: 15px; font-weight: 700; color: var(--dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .client-folder-phone { font-size: 12px; color: var(--secondary); margin-top: 2px; }
+        .client-folder-meta { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+        .client-folder-badge {
+            font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+            background: var(--gray-100); color: var(--secondary);
+        }
+        .client-folder-outstanding {
+            font-size: 13px; font-weight: 700; color: var(--danger); white-space: nowrap;
+        }
+        .client-folder-outstanding.cleared { color: var(--success); }
+        .client-folder-toggle { font-size: 12px; color: var(--secondary); transition: transform .2s; flex-shrink: 0; }
+        .client-folder.open .client-folder-toggle { transform: rotate(90deg); }
+
+        .client-folder-body { display: none; border-top: 1px solid var(--gray-200); overflow-x: auto; }
+        .client-folder.open .client-folder-body { display: block; }
+        .client-loan-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; }
+        .client-loan-table th {
+            padding: 8px 10px; background: var(--gray-100);
+            font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--secondary);
+            text-align: left; font-weight: 600; white-space: nowrap;
+        }
+        .client-loan-table td { padding: 8px 10px; border-bottom: 1px solid var(--gray-100); vertical-align: middle; white-space: nowrap; }
+        .client-loan-table tr:last-child td { border-bottom: none; }
+        .client-loan-table .has-balance { color: var(--danger); font-weight: 600; }
+        .client-loan-table .cleared     { color: var(--success); font-weight: 600; }
+
+        .loan-folders-empty { text-align: center; padding: 48px 24px; color: var(--secondary); }
+        .loan-grand-total { background: var(--gray-100); border-radius: 10px; padding: 12px 18px; display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px; margin-top: 8px; }
+        .loan-grand-total span { color: var(--secondary); } .loan-grand-total strong { color: var(--dark); }
+        </style>
+
+        <?php if (empty($clients_data)): ?>
+            <div class="loan-folders-empty">No loan records found.</div>
+        <?php else: ?>
+        <div class="client-folders">
+        <?php foreach ($clients_data as $client_name => $client):
+            $outstanding = $client['total_amount'] - $client['total_paid'];
+            $loan_count  = count($client['loans']);
+            $folder_class = ($outstanding <= 0) ? 'fully-paid' : (($client['total_paid'] > 0) ? 'partial' : '');
+            $folder_id = 'cf_' . md5($client_name);
+        ?>
+        <div class="client-folder <?php echo $folder_class; ?>" id="<?php echo $folder_id; ?>"
+             onclick="toggleFolder('<?php echo $folder_id; ?>')">
+            <div class="client-folder-header">
+                <div class="client-folder-icon">📁</div>
+                <div class="client-folder-info">
+                    <div class="client-folder-name" title="<?php echo htmlspecialchars($client_name); ?>">
+                        <?php echo htmlspecialchars($client_name); ?>
+                    </div>
+                    <?php if ($client['phone']): ?>
+                    <div class="client-folder-phone"><?php echo htmlspecialchars($client['phone']); ?></div>
+                    <?php endif; ?>
+                    <div class="client-folder-meta">
+                        <span class="client-folder-badge"><?php echo $loan_count; ?> loan<?php echo $loan_count != 1 ? 's' : ''; ?></span>
+                        <span class="client-folder-outstanding <?php echo $outstanding <= 0 ? 'cleared' : ''; ?>">
+                            <?php echo $outstanding > 0 ? 'Owed: RWF ' . number_format($outstanding, 0) : 'Cleared'; ?>
+                        </span>
+                    </div>
+                </div>
+                <?php if ($outstanding > 0): ?>
+                <button type="button" class="btn-pay"
+                    style="flex-shrink:0;"
+                    onclick="event.stopPropagation(); openGlobalLoanPayFor('<?php echo htmlspecialchars($client_name, ENT_QUOTES); ?>', <?php echo $outstanding; ?>)">
+                    Pay All
+                </button>
+                <?php endif; ?>
+                <div class="client-folder-toggle">&#9654;</div>
+            </div>
+            <div class="client-folder-body">
+                <table class="client-loan-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Product</th>
+                            <th>Qty</th>
+                            <th>Amount</th>
+                            <th>Paid</th>
+                            <th>Balance</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($client['loans'] as $loan):
+                        $bal = $loan['amount'] - $loan['total_paid'];
+                        if ($loan['total_paid'] >= $loan['amount'])   { $badge = 'badge-paid'; $st = 'Paid'; }
+                        elseif ($loan['total_paid'] > 0)               { $badge = 'badge-partial'; $st = 'Partial'; }
+                        else                                            { $badge = 'badge-unpaid'; $st = 'Unpaid'; }
+                    ?>
                     <tr>
-                        <th>#</th>
-                        <th>Date</th>
-                        <th>Client</th>
-                        <th>Product</th>
-                        <th>Qty</th>
-                        <th>Amount</th>
-                        <th>Paid</th>
-                        <th>Balance</th>
-                        <th>Status</th>
-                        <th>Actions</th>
+                        <td><?php echo date('M d, Y', strtotime($loan['loan_date'])); ?></td>
+                        <td><?php echo htmlspecialchars($loan['product_category'] . '-' . $loan['product_name']); ?></td>
+                        <td><?php echo $loan['qty']; ?></td>
+                        <td>RWF <?php echo number_format($loan['amount'], 0); ?></td>
+                        <td>RWF <?php echo number_format($loan['total_paid'], 0); ?></td>
+                        <td class="<?php echo $bal > 0 ? 'has-balance' : 'cleared'; ?>">RWF <?php echo number_format($bal, 0); ?></td>
+                        <td onclick="event.stopPropagation()">
+                            <div class="loan-actions">
+                                <?php if ($bal > 0): ?>
+                                <button type="button" class="btn-pay"
+                                    data-loan-id="<?php echo $loan['id']; ?>"
+                                    data-client="<?php echo htmlspecialchars($loan['client'], ENT_QUOTES); ?>"
+                                    data-balance="<?php echo $bal; ?>"
+                                    onclick="openPayment(this)">Pay</button>
+                                <?php endif; ?>
+                                <a href="loans.php?delete=<?php echo $loan['id']; ?>" class="btn-del"
+                                    onclick="return confirm('Delete this loan?')">Del</a>
+                            </div>
+                        </td>
                     </tr>
-                </thead>
-                <tbody>
-                <?php
-                $grand_amount = 0; $grand_paid = 0; $i = 0;
-                while ($row = mysqli_fetch_assoc($records)):
-                    $balance = $row['amount'] - $row['total_paid'];
-                    if ($row['total_paid'] >= $row['amount'])   { $status = 'Paid';    $badge = 'badge-paid'; }
-                    elseif ($row['total_paid'] > 0)              { $status = 'Partial'; $badge = 'badge-partial'; }
-                    else                                         { $status = 'Unpaid';  $badge = 'badge-unpaid'; }
-                    $grand_amount += $row['amount'];
-                    $grand_paid   += $row['total_paid'];
-                ?>
-                <tr>
-                    <td><?php echo ++$i; ?></td>
-                    <td><?php echo date('M d, Y', strtotime($row['loan_date'])); ?></td>
-                    <td class="client-cell">
-                        <strong><?php echo htmlspecialchars($row['client']); ?></strong>
-                        <?php if ($row['phone']): ?>
-                            <span><?php echo htmlspecialchars($row['phone']); ?></span>
-                        <?php endif; ?>
-                    </td>
-                    <td><?php echo htmlspecialchars($row['product_category'] . '-' . $row['product_name']); ?></td>
-                    <td><?php echo $row['qty']; ?></td>
-                    <td class="amount-cell">RWF <?php echo number_format($row['amount'], 0); ?></td>
-                    <td class="amount-cell">RWF <?php echo number_format($row['total_paid'], 0); ?></td>
-                    <td class="balance-cell <?php echo $balance > 0 ? 'has-balance' : 'cleared'; ?>">
-                        RWF <?php echo number_format($balance, 0); ?>
-                    </td>
-                    <td><span class="badge <?php echo $badge; ?>"><?php echo $status; ?></span></td>
-                    <td>
-                        <div class="loan-actions">
-                            <?php if ($balance > 0): ?>
-                            <button type="button" class="btn-pay"
-                                data-loan-id="<?php echo $row['id']; ?>"
-                                data-client="<?php echo htmlspecialchars($row['client'], ENT_QUOTES); ?>"
-                                data-balance="<?php echo $balance; ?>"
-                                onclick="openPayment(this)">Pay</button>
-                            <?php endif; ?>
-                            <a href="loans.php?delete=<?php echo $row['id']; ?>" class="btn-del"
-                                onclick="return confirm('Delete this loan?')">Del</a>
-                        </div>
-                    </td>
-                </tr>
-                <?php endwhile; ?>
-                </tbody>
-                <tfoot>
-                    <tr class="grand-total">
-                        <td colspan="5">Total</td>
-                        <td>RWF <?php echo number_format($grand_amount, 0); ?></td>
-                        <td>RWF <?php echo number_format($grand_paid, 0); ?></td>
-                        <td>RWF <?php echo number_format($grand_amount - $grand_paid, 0); ?></td>
-                        <td colspan="2"></td>
-                    </tr>
-                </tfoot>
-            </table>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endforeach; ?>
+        </div>
+
+        <div class="loan-grand-total">
+            <span>Grand Total &mdash;</span>
+            <span>Loaned: <strong>RWF <?php echo number_format($grand_amount, 0); ?></strong></span>
+            <span>Collected: <strong>RWF <?php echo number_format($grand_paid, 0); ?></strong></span>
+            <span>Outstanding: <strong style="color:var(--danger);">RWF <?php echo number_format($grand_amount - $grand_paid, 0); ?></strong></span>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Global Loan Payment Modal -->
+<div id="globalLoanPayModal" class="modal">
+    <div class="modal-content" style="max-width:600px;">
+        <span class="close" onclick="closeModal('globalLoanPayModal')">&times;</span>
+        <h2>Global Loan Payment</h2>
+        <p style="color:var(--secondary);font-size:13px;margin-bottom:20px;">
+            Distributes payment across all unpaid loans — oldest first.
+        </p>
+        <div id="globalLoanPayAlert" class="alert" style="display:none;"></div>
+        <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:160px;margin-bottom:0;">
+                <label>Amount to Pay (RWF)*</label>
+                <input type="number" id="gloan_amount" min="1" step="1" placeholder="Enter amount..."
+                    oninput="scheduleLoanPreview()">
+            </div>
+            <div class="form-group" style="flex:1;min-width:160px;margin-bottom:0;">
+                <label>Filter by Client <small style="font-weight:400;">(optional)</small></label>
+                <input type="text" id="gloan_client" placeholder="Leave blank for all"
+                    oninput="scheduleLoanPreview()">
+            </div>
+        </div>
+        <div id="globalLoanPreview" style="display:none;">
+            <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--secondary);margin-bottom:8px;">
+                Payment Distribution Preview
+            </div>
+            <div style="max-height:280px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:10px;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                    <thead>
+                        <tr style="background:var(--gray-100);">
+                            <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--secondary);text-transform:uppercase;">Date</th>
+                            <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--secondary);text-transform:uppercase;">Product</th>
+                            <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--secondary);text-transform:uppercase;">Client</th>
+                            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--secondary);text-transform:uppercase;">Balance</th>
+                            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--secondary);text-transform:uppercase;">Will Pay</th>
+                        </tr>
+                    </thead>
+                    <tbody id="loanPreviewBody"></tbody>
+                </table>
+            </div>
+            <div id="loanPreviewSummary" style="margin-top:10px;font-size:13px;color:var(--secondary);"></div>
+        </div>
+        <div style="margin-top:20px;display:flex;gap:10px;">
+            <button id="globalLoanPayBtn" class="btn btn-primary" onclick="execGlobalLoanPay()" disabled>Apply Payment</button>
+            <button class="btn btn-secondary" onclick="closeModal('globalLoanPayModal')">Cancel</button>
         </div>
     </div>
 </div>
@@ -531,6 +761,157 @@ function openPayment(btn) {
     document.getElementById('paymentAlert').style.display = 'none';
     document.getElementById('payment_date').value = new Date().toISOString().split('T')[0];
     openModal('paymentModal');
+}
+
+// ── Live client search ────────────────────────────────────────────────────────
+(function() {
+    var input = document.getElementById('liveClientSearch');
+    if (!input) return;
+    input.addEventListener('input', function() {
+        var term = this.value.trim().toLowerCase();
+        var folders = document.querySelectorAll('.client-folder');
+        var visible = 0;
+        folders.forEach(function(card) {
+            var name = (card.querySelector('.client-folder-name') || {}).textContent || '';
+            var phone = (card.querySelector('.client-folder-phone') || {}).textContent || '';
+            var match = !term || name.toLowerCase().indexOf(term) !== -1 || phone.toLowerCase().indexOf(term) !== -1;
+            card.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        // show/hide empty state
+        var empty = document.querySelector('.loan-folders-empty');
+        if (empty) empty.style.display = visible === 0 ? '' : 'none';
+    });
+})();
+
+// ── Client folder toggle ───────────────────────────────────────────────────────
+function toggleFolder(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var wasOpen = el.classList.contains('open');
+    el.classList.toggle('open');
+    if (!wasOpen) {
+        setTimeout(function() {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 50);
+    }
+}
+
+// ── Global Loan Payment ────────────────────────────────────────────────────────
+function openGlobalLoanPay() {
+    document.getElementById('gloan_amount').value  = '';
+    document.getElementById('gloan_client').value  = '';
+    document.getElementById('globalLoanPreview').style.display = 'none';
+    document.getElementById('globalLoanPayAlert').style.display = 'none';
+    document.getElementById('globalLoanPayBtn').disabled = true;
+    openModal('globalLoanPayModal');
+}
+
+function openGlobalLoanPayFor(clientName, outstanding) {
+    document.getElementById('gloan_amount').value  = outstanding;
+    document.getElementById('gloan_client').value  = clientName;
+    document.getElementById('globalLoanPreview').style.display = 'none';
+    document.getElementById('globalLoanPayAlert').style.display = 'none';
+    document.getElementById('globalLoanPayBtn').disabled = true;
+    openModal('globalLoanPayModal');
+    scheduleLoanPreview();
+}
+
+var loanPreviewTimer = null;
+function scheduleLoanPreview() {
+    clearTimeout(loanPreviewTimer);
+    loanPreviewTimer = setTimeout(loadLoanPreview, 400);
+}
+
+function loadLoanPreview() {
+    var amount  = parseFloat(document.getElementById('gloan_amount').value) || 0;
+    var client  = document.getElementById('gloan_client').value.trim();
+    var preview = document.getElementById('globalLoanPreview');
+    var btn     = document.getElementById('globalLoanPayBtn');
+
+    if (amount <= 0) { preview.style.display = 'none'; btn.disabled = true; return; }
+
+    var data = new FormData();
+    data.append('preview_global_loan_payment', '1');
+    data.append('total_amount', amount);
+    data.append('client_filter', client);
+
+    fetch('loans.php', { method: 'POST', body: data })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            var body    = document.getElementById('loanPreviewBody');
+            var summary = document.getElementById('loanPreviewSummary');
+            body.innerHTML = '';
+
+            if (!res.rows || res.rows.length === 0) {
+                body.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--secondary);">No unpaid loans found.</td></tr>';
+                btn.disabled = true;
+                preview.style.display = 'block';
+                return;
+            }
+
+            var covered = 0, partial = 0, skipped = 0;
+            res.rows.forEach(function(row) {
+                var willPay = parseFloat(row.will_pay);
+                var tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid var(--gray-200)';
+                var statusColor = willPay <= 0 ? '#94a3b8' : (row.full ? 'var(--success)' : 'var(--warning)');
+                var payLabel    = willPay <= 0 ? '—' : 'RWF ' + willPay.toLocaleString();
+                tr.innerHTML =
+                    '<td style="padding:9px 12px;">' + row.date + '</td>' +
+                    '<td style="padding:9px 12px;">' + row.label + '</td>' +
+                    '<td style="padding:9px 12px;color:var(--secondary);">' + (row.client || '-') + '</td>' +
+                    '<td style="padding:9px 12px;text-align:right;">RWF ' + parseFloat(row.balance).toLocaleString() + '</td>' +
+                    '<td style="padding:9px 12px;text-align:right;font-weight:600;color:' + statusColor + ';">' + payLabel + '</td>';
+                body.appendChild(tr);
+                if (willPay >= row.balance) covered++;
+                else if (willPay > 0)       partial++;
+                else                        skipped++;
+            });
+
+            var applied = amount - res.leftover;
+            var parts = [];
+            if (covered) parts.push('<span style="color:var(--success);">&#10003; ' + covered + ' fully paid</span>');
+            if (partial) parts.push('<span style="color:var(--warning);">~ ' + partial + ' partial</span>');
+            if (skipped) parts.push('<span style="color:var(--secondary);">' + skipped + ' not covered</span>');
+            if (res.leftover > 0) parts.push('<span style="color:var(--danger);">RWF ' + parseFloat(res.leftover).toLocaleString() + ' leftover</span>');
+
+            summary.innerHTML = parts.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;') +
+                '<br><small>Total applied: <strong>RWF ' + applied.toLocaleString() + '</strong> of RWF ' + parseFloat(res.total_outstanding).toLocaleString() + ' outstanding</small>';
+
+            preview.style.display = 'block';
+            btn.disabled = (applied <= 0);
+        });
+}
+
+function execGlobalLoanPay() {
+    var amount  = parseFloat(document.getElementById('gloan_amount').value) || 0;
+    var client  = document.getElementById('gloan_client').value.trim();
+    var btn     = document.getElementById('globalLoanPayBtn');
+    var alertBox = document.getElementById('globalLoanPayAlert');
+
+    if (amount <= 0) return;
+    btn.disabled = true; btn.textContent = 'Applying...';
+    alertBox.style.display = 'none';
+
+    var data = new FormData();
+    data.append('exec_global_loan_payment', '1');
+    data.append('total_amount', amount);
+    data.append('client_filter', client);
+
+    fetch('loans.php', { method: 'POST', body: data })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (res.success) {
+                closeModal('globalLoanPayModal');
+                location.reload();
+            } else {
+                alertBox.className = 'alert alert-danger';
+                alertBox.textContent = res.message || 'An error occurred.';
+                alertBox.style.display = 'block';
+                btn.disabled = false; btn.textContent = 'Apply Payment';
+            }
+        });
 }
 </script>
 </body>
