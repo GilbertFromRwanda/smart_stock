@@ -409,27 +409,27 @@ $purchases = mysqli_query($conn, "
                 </div>
                 <div class="form-group">
                     <label for="quantity">Quantity (Number of packages)*</label>
-                    <input type="number" id="quantity" value="" name="quantity" required min="1">
+                    <input type="text" id="quantity" value="" name="quantity" required min="1">
                 </div>
                 
                 <div class="form-group">
                     <label for="pieces_per_qty">Pieces per Quantity(Qty Imwe Ingana ite?)*</label>
-                    <input type="number" id="pieces_per_qty" name="pieces_per_qty" required min="1" value="">
+                    <input type="text" id="pieces_per_qty" name="pieces_per_qty" required min="1" value="">
                 </div>
                 
                 <div class="form-group">
                     <label for="cost_price">Cost Price (per package)(Uko waranguye)*</label>
-                    <input type="number" id="cost_price" name="cost_price" step="0.01" required>
+                    <input type="text" id="cost_price" name="cost_price" step="0.01" required>
                 </div>
                 
                 <div class="form-group">
                     <label for="package_price">Kuranguza Price (Uko Uzaranguza)*</label>
-                    <input type="number" id="package_price" name="package_price" step="0.01" required>
+                    <input type="text" id="package_price" name="package_price" step="0.01" required>
                 </div>
                 
                 <div class="form-group">
                     <label for="retail_price">Detaye Price (per piece)*</label>
-                    <input type="number" id="retail_price" name="retail_price" step="0.01" required>
+                    <input type="text" id="retail_price" name="retail_price" step="0.01" required>
                 </div>
                   <div class="form-group">
                     <label for="supplier_id">Supplier</label>
@@ -476,23 +476,23 @@ $purchases = mysqli_query($conn, "
                 </div>
                 <div class="form-group">
                     <label for="edit_quantity">Quantity (Number of packages)*</label>
-                    <input type="number" id="edit_quantity" name="quantity" required min="1">
+                    <input type="text" id="edit_quantity" name="quantity" required min="1">
                 </div>
                 <div class="form-group">
                     <label for="edit_pieces_per_qty">Pieces per Quantity(Qty Imwe Ingana ite?)*</label>
-                    <input type="number" id="edit_pieces_per_qty" name="pieces_per_qty" required min="1">
+                    <input type="text" id="edit_pieces_per_qty" name="pieces_per_qty" required min="1">
                 </div>
                 <div class="form-group">
                     <label for="edit_cost_price">Cost Price (per package)(Uko waranguye)*</label>
-                    <input type="number" id="edit_cost_price" name="cost_price" step="0.01" required>
+                    <input type="text" id="edit_cost_price" name="cost_price" step="0.01" required>
                 </div>
                 <div class="form-group">
                     <label for="edit_package_price">Kuranguza Price (Uko Uzaranguza)*</label>
-                    <input type="number" id="edit_package_price" name="package_price" step="0.01" required>
+                    <input type="text" id="edit_package_price" name="package_price" step="0.01" required>
                 </div>
                 <div class="form-group">
                     <label for="edit_retail_price">Detaye Price (per piece)*</label>
-                    <input type="number" id="edit_retail_price" name="retail_price" step="0.01" required>
+                    <input type="text" id="edit_retail_price" name="retail_price" step="0.01" required>
                 </div>
                 <div class="form-group">
                     <label for="edit_supplier_id">Supplier</label>

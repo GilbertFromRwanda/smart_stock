@@ -373,7 +373,7 @@ $recent_retail_sales = mysqli_query($conn, "
 
                 <div class="form-group">
                     <label for="bulk_quantity">Quantity (Packages)*</label>
-                    <input type="number" id="bulk_quantity" name="quantity" required min="1" oninput="calculateBulkTotal()">
+                    <input type="text" id="bulk_quantity" name="quantity" required min="1" oninput="calculateBulkTotal()">
                     <small id="bulk_stock_info" class="field-hint"></small>
                     <small id="bulk_qty_error" class="field-error"></small>
                 </div>
@@ -381,7 +381,7 @@ $recent_retail_sales = mysqli_query($conn, "
                 <div class="form-group">
                     <label for="bulk_selling_price">Selling Price (per package)*</label>
                     <div class="price-input-group">
-                        <input type="number" id="bulk_selling_price" name="selling_price"
+                        <input type="text" id="bulk_selling_price" name="selling_price"
                                step="1" required min="1"
                                oninput="calculateBulkTotal()">
                         <span class="default-price-badge" onclick="setBulkDefaultPrice()">Use Default</span>
@@ -457,7 +457,7 @@ $recent_retail_sales = mysqli_query($conn, "
 
                 <div class="form-group">
                     <label for="pieces_sold">Number of Pieces*</label>
-                    <input type="number" id="pieces_sold" name="pieces_sold" required min="1" oninput="calculateRetailTotal()">
+                    <input type="text" id="pieces_sold" name="pieces_sold" required min="1" oninput="calculateRetailTotal()">
                     <small id="retail_stock_info" class="field-hint"></small>
                     <small id="retail_qty_error" class="field-error"></small>
                 </div>
@@ -465,7 +465,7 @@ $recent_retail_sales = mysqli_query($conn, "
                 <div class="form-group">
                     <label for="retail_selling_price">Selling Price (per piece)*</label>
                     <div class="price-input-group">
-                        <input type="number" id="retail_selling_price" name="selling_price"
+                        <input type="text" id="retail_selling_price" name="selling_price"
                                step="1" required min="1"
                                oninput="calculateRetailTotal()">
                         <span class="default-price-badge" onclick="setRetailDefaultPrice()">Use Default</span>

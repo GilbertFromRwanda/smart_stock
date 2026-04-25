@@ -547,7 +547,7 @@ $stats_outstanding = $stats['total_amount'] - $stats['total_paid'];
             </div>
             <div class="form-group">
                 <label>Amount (RWF)*</label>
-                <input type="number" id="loan_amount" name="amount" min="1" step="1" required value="0">
+                <input type="text" id="loan_amount" name="amount" min="1" step="1" required value="0">
             </div>
             <?php if ($clients_arr): ?>
             <div class="form-group">
