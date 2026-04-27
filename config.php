@@ -4,7 +4,7 @@ session_start();
 // Database configuration
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_PASS', '@Git123');
 define('DB_NAME', 'olive2_db');
 
 // Create connection

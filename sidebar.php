@@ -43,7 +43,7 @@ $nav = [
 ?>
 <div class="sidebar">
     <div class="sidebar-brand">
-        <div class="sidebar-brand-icon">UO</div>
+        <div class="sidebar-brand-icon">S</div>
         <div>
             <div class="sidebar-brand-name">UO &amp; GN</div>
             <div class="sidebar-brand-sub">Boutique</div>

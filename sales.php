@@ -61,6 +61,66 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_sale'])) {
     exit;
 }
 
+// Handle Retail Sale as Loan
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_loan'])) {
+    $product_id = (int)$_POST['product_id'];
+    $qty        = (int)$_POST['pieces_sold'];
+    $full_total = (float)$_POST['selling_price'] * $qty;
+    $amount     = isset($_POST['loan_amount']) && (float)$_POST['loan_amount'] > 0 ? (float)$_POST['loan_amount'] : $full_total;
+    $client     = mysqli_real_escape_string($conn, trim($_POST['customer_name']));
+    $phone      = mysqli_real_escape_string($conn, trim($_POST['phone'] ?? ''));
+    $loan_date  = date('Y-m-d');
+
+    if ($product_id <= 0 || $qty <= 0 || empty($client)) {
+        $_SESSION['flash_error'] = "Product, quantity and client name are required.";
+        header("Location: sales.php"); exit;
+    }
+    $retail = mysqli_fetch_assoc(mysqli_query($conn, "SELECT pieces_quantity FROM retail_stock WHERE product_id = $product_id"));
+    if (!$retail || $retail['pieces_quantity'] < $qty) {
+        $_SESSION['flash_error'] = "Insufficient retail stock available.";
+        header("Location: sales.php"); exit;
+    }
+    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date')");
+    if ($ins) {
+        mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity - $qty WHERE product_id = $product_id");
+        $_SESSION['flash_success'] = "Loan registered for $client — RWF " . number_format($amount, 0);
+        $_SESSION['flash_sale_type'] = 'retail';
+    } else {
+        $_SESSION['flash_error'] = "Failed to register loan.";
+    }
+    header("Location: sales.php"); exit;
+}
+
+// Handle Bulk Sale as Loan
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_loan'])) {
+    $product_id = (int)$_POST['product_id'];
+    $qty        = (int)$_POST['quantity'];
+    $full_total = (float)$_POST['selling_price'] * $qty;
+    $amount     = isset($_POST['loan_amount']) && (float)$_POST['loan_amount'] > 0 ? (float)$_POST['loan_amount'] : $full_total;
+    $client     = mysqli_real_escape_string($conn, trim($_POST['customer_name']));
+    $phone      = mysqli_real_escape_string($conn, trim($_POST['phone'] ?? ''));
+    $loan_date  = date('Y-m-d');
+
+    if ($product_id <= 0 || $qty <= 0 || empty($client)) {
+        $_SESSION['flash_error'] = "Product, quantity and client name are required.";
+        header("Location: sales.php"); exit;
+    }
+    $stock = mysqli_fetch_assoc(mysqli_query($conn, "SELECT quantity FROM stock WHERE product_id = $product_id"));
+    if (!$stock || $stock['quantity'] < $qty) {
+        $_SESSION['flash_error'] = "Insufficient stock available.";
+        header("Location: sales.php"); exit;
+    }
+    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date')");
+    if ($ins) {
+        mysqli_query($conn, "UPDATE stock SET quantity = quantity - $qty WHERE product_id = $product_id");
+        $_SESSION['flash_success'] = "Loan registered for $client — RWF " . number_format($amount, 0);
+        $_SESSION['flash_sale_type'] = 'bulk';
+    } else {
+        $_SESSION['flash_error'] = "Failed to register loan.";
+    }
+    header("Location: sales.php"); exit;
+}
+
 // Read flash messages from session
 if (isset($_SESSION['flash_success'])) {
     $success = $_SESSION['flash_success'];
@@ -111,6 +171,14 @@ $recent_retail_sales = mysqli_query($conn, "
     WHERE sr.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe'
     ORDER BY sr.created_at DESC
 ");
+
+// Existing loan clients for picker
+$loan_clients_query = mysqli_query($conn, "
+    SELECT client, phone, MAX(loan_date) AS last_visit, COUNT(*) AS visits
+    FROM loans GROUP BY client, phone ORDER BY last_visit DESC
+");
+$loan_clients_arr = [];
+while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
 ?>
 
 <!DOCTYPE html>
@@ -328,7 +396,7 @@ $recent_retail_sales = mysqli_query($conn, "
         <div class="modal-content">
             <span class="close" onclick="closeModal('bulkSaleModal')">&times;</span>
             <h2>New Bulk Sale (Full Package)</h2>
-            <form method="POST" action="" id="bulkSaleForm" onsubmit="return confirmBulkSale()">
+            <form method="POST" action="" id="bulkSaleForm" onsubmit="return handleBulkSubmit()">
                 <div class="form-group">
                     <label for="bulk_product_id">Select Product*</label>
                     <select id="bulk_product_id" name="product_id" required onchange="updateBulkProductDetails()" style="display:none">
@@ -395,6 +463,43 @@ $recent_retail_sales = mysqli_query($conn, "
                            placeholder="Enter customer name">
                 </div>
 
+                <div class="form-group" style="margin-bottom:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="bulk_is_loan" onchange="toggleBulkLoan()" style="width:16px;height:16px;cursor:pointer;">
+                        <span>Register as Loan <small style="color:var(--secondary);font-weight:400;">(deferred payment)</small></span>
+                    </label>
+                </div>
+                <?php if ($loan_clients_arr): ?>
+                <div class="form-group" id="bulk_client_picker_group" style="display:none;">
+                    <label>Existing Client</label>
+                    <div class="searchable-select" id="bulkClientPickerWrap">
+                        <input type="text" class="searchable-select-input" id="bulk_client_picker_search"
+                            placeholder="Search registered client..." autocomplete="off">
+                        <div class="searchable-select-dropdown" id="bulk_client_picker_dropdown">
+                            <?php foreach ($loan_clients_arr as $c): ?>
+                                <div class="searchable-select-option"
+                                    data-client="<?php echo htmlspecialchars($c['client'], ENT_QUOTES); ?>"
+                                    data-phone="<?php echo htmlspecialchars($c['phone'], ENT_QUOTES); ?>">
+                                    <?php echo htmlspecialchars($c['client']); ?>
+                                    <?php if ($c['phone']): ?> — <?php echo htmlspecialchars($c['phone']); ?><?php endif; ?>
+                                    <small style="color:var(--secondary);"> (<?php echo $c['visits']; ?> visit<?php echo $c['visits']>1?'s':''; ?>)</small>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <small style="color:var(--secondary);margin-top:3px;display:block;">Pick to auto-fill, or type a new name below.</small>
+                </div>
+                <?php endif; ?>
+                <div class="form-group" id="bulk_phone_group" style="display:none;">
+                    <label for="bulk_phone">Client Phone</label>
+                    <input type="text" id="bulk_phone" name="phone" placeholder="e.g. 07XXXXXXXX">
+                </div>
+                <div class="form-group" id="bulk_loan_amount_group" style="display:none;">
+                    <label for="bulk_loan_amount">Loan Amount (RWF)*</label>
+                    <input type="text" id="bulk_loan_amount" name="loan_amount" min="1" step="1">
+                    <small style="color:var(--secondary);">Auto-filled with full total. Reduce if client pays part upfront.</small>
+                </div>
+
                 <div class="sale-summary" id="bulk_summary" style="display:none;">
                     <div class="summary-row"><span>Product</span><strong id="bulk_sum_product"></strong></div>
                     <div class="summary-row"><span>Packages</span><strong id="bulk_sum_qty"></strong></div>
@@ -412,7 +517,7 @@ $recent_retail_sales = mysqli_query($conn, "
         <div class="modal-content">
             <span class="close" onclick="closeModal('retailSaleModal')">&times;</span>
             <h2>New Retail Sale (Piece by Piece)</h2>
-            <form method="POST" action="" id="retailSaleForm" onsubmit="return confirmRetailSale()">
+            <form method="POST" action="" id="retailSaleForm" onsubmit="return handleRetailSubmit()">
                 <div class="form-group">
                     <label for="retail_product_id">Select Product*</label>
                     <select id="retail_product_id" name="product_id" required onchange="updateRetailProductDetails()" style="display:none">
@@ -477,6 +582,43 @@ $recent_retail_sales = mysqli_query($conn, "
                     <label for="retail_customer">Customer Name</label>
                     <input type="text" id="retail_customer" name="customer_name" value="client"
                            placeholder="Enter customer name">
+                </div>
+
+                <div class="form-group" style="margin-bottom:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="retail_is_loan" onchange="toggleRetailLoan()" style="width:16px;height:16px;cursor:pointer;">
+                        <span>Register as Loan <small style="color:var(--secondary);font-weight:400;">(deferred payment)</small></span>
+                    </label>
+                </div>
+                <?php if ($loan_clients_arr): ?>
+                <div class="form-group" id="retail_client_picker_group" style="display:none;">
+                    <label>Existing Client</label>
+                    <div class="searchable-select" id="retailClientPickerWrap">
+                        <input type="text" class="searchable-select-input" id="retail_client_picker_search"
+                            placeholder="Search registered client..." autocomplete="off">
+                        <div class="searchable-select-dropdown" id="retail_client_picker_dropdown">
+                            <?php foreach ($loan_clients_arr as $c): ?>
+                                <div class="searchable-select-option"
+                                    data-client="<?php echo htmlspecialchars($c['client'], ENT_QUOTES); ?>"
+                                    data-phone="<?php echo htmlspecialchars($c['phone'], ENT_QUOTES); ?>">
+                                    <?php echo htmlspecialchars($c['client']); ?>
+                                    <?php if ($c['phone']): ?> — <?php echo htmlspecialchars($c['phone']); ?><?php endif; ?>
+                                    <small style="color:var(--secondary);"> (<?php echo $c['visits']; ?> visit<?php echo $c['visits']>1?'s':''; ?>)</small>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <small style="color:var(--secondary);margin-top:3px;display:block;">Pick to auto-fill, or type a new name below.</small>
+                </div>
+                <?php endif; ?>
+                <div class="form-group" id="retail_phone_group" style="display:none;">
+                    <label for="retail_phone">Client Phone</label>
+                    <input type="text" id="retail_phone" name="phone" placeholder="e.g. 07XXXXXXXX">
+                </div>
+                <div class="form-group" id="retail_loan_amount_group" style="display:none;">
+                    <label for="retail_loan_amount">Loan Amount (RWF)*</label>
+                    <input type="text" id="retail_loan_amount" name="loan_amount" min="1" step="1">
+                    <small style="color:var(--secondary);">Auto-filled with full total. Reduce if client pays part upfront.</small>
                 </div>
 
                 <div class="sale-summary" id="retail_summary" style="display:none;">
@@ -777,6 +919,120 @@ $recent_retail_sales = mysqli_query($conn, "
                 'Price/Piece: RWF ' + price.toLocaleString() + '\n' +
                 'Total: RWF ' + total.toLocaleString() + '\n\n' +
                 'This will deduct ' + qty + ' piece(s) from retail stock.'
+            );
+        }
+
+        // --- Loan toggle ---
+        function toggleBulkLoan() {
+            var isLoan = document.getElementById('bulk_is_loan').checked;
+            var show = isLoan ? 'block' : 'none';
+            document.getElementById('bulk_phone_group').style.display = show;
+            document.getElementById('bulk_loan_amount_group').style.display = show;
+            var cpg = document.getElementById('bulk_client_picker_group');
+            if (cpg) cpg.style.display = show;
+            if (isLoan) {
+                var qty = parseInt(document.getElementById('bulk_quantity').value) || 0;
+                var price = parseFloat(document.getElementById('bulk_selling_price').value) || 0;
+                if (qty > 0 && price > 0) document.getElementById('bulk_loan_amount').value = qty * price;
+            }
+            var btn = document.getElementById('bulk_submit_btn');
+            btn.name = isLoan ? 'bulk_loan' : 'bulk_sale';
+            btn.textContent = isLoan ? 'Register Loan' : 'Save Bulk Sale';
+        }
+
+        function toggleRetailLoan() {
+            var isLoan = document.getElementById('retail_is_loan').checked;
+            var show = isLoan ? 'block' : 'none';
+            document.getElementById('retail_phone_group').style.display = show;
+            document.getElementById('retail_loan_amount_group').style.display = show;
+            var cpg = document.getElementById('retail_client_picker_group');
+            if (cpg) cpg.style.display = show;
+            if (isLoan) {
+                var qty = parseInt(document.getElementById('pieces_sold').value) || 0;
+                var price = parseFloat(document.getElementById('retail_selling_price').value) || 0;
+                if (qty > 0 && price > 0) document.getElementById('retail_loan_amount').value = qty * price;
+            }
+            var btn = document.getElementById('retail_submit_btn');
+            btn.name = isLoan ? 'retail_loan' : 'retail_sale';
+            btn.textContent = isLoan ? 'Register Loan' : 'Save Retail Sale';
+        }
+
+        function initLoanClientPicker(wrapId, searchId, dropdownId, clientInputId, phoneInputId) {
+            var wrap = document.getElementById(wrapId);
+            if (!wrap) return;
+            var search   = document.getElementById(searchId);
+            var dropdown = document.getElementById(dropdownId);
+            var options  = dropdown.querySelectorAll('.searchable-select-option');
+            var hi = -1;
+
+            search.addEventListener('focus', function() { dropdown.classList.add('open'); filter(); });
+            search.addEventListener('input', function() { dropdown.classList.add('open'); hi = -1; filter(); });
+            search.addEventListener('keydown', function(e) {
+                var vis = dropdown.querySelectorAll('.searchable-select-option:not(.hidden)');
+                if (e.key === 'ArrowDown') { e.preventDefault(); hi = Math.min(hi+1, vis.length-1); hl(vis); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); hi = Math.max(hi-1,0); hl(vis); }
+                else if (e.key === 'Enter') { e.preventDefault(); if (hi>=0&&vis[hi]) pick(vis[hi]); }
+                else if (e.key === 'Escape') dropdown.classList.remove('open');
+            });
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('#' + wrapId)) dropdown.classList.remove('open');
+            });
+            options.forEach(function(o) { o.addEventListener('click', function() { pick(o); }); });
+
+            function filter() {
+                var term = search.value.toLowerCase();
+                options.forEach(function(o) { o.classList.toggle('hidden', o.textContent.trim().toLowerCase().indexOf(term)===-1); });
+            }
+            function hl(vis) {
+                options.forEach(function(o) { o.classList.remove('highlighted'); });
+                if (vis[hi]) { vis[hi].classList.add('highlighted'); vis[hi].scrollIntoView({block:'nearest'}); }
+            }
+            function pick(opt) {
+                document.getElementById(clientInputId).value = opt.getAttribute('data-client');
+                document.getElementById(phoneInputId).value  = opt.getAttribute('data-phone');
+                search.value = opt.getAttribute('data-client');
+                dropdown.classList.remove('open'); hi = -1;
+            }
+        }
+
+        initLoanClientPicker('bulkClientPickerWrap',   'bulk_client_picker_search',   'bulk_client_picker_dropdown',   'bulk_customer',   'bulk_phone');
+        initLoanClientPicker('retailClientPickerWrap', 'retail_client_picker_search', 'retail_client_picker_dropdown', 'retail_customer', 'retail_phone');
+
+        function handleBulkSubmit() {
+            return document.getElementById('bulk_is_loan').checked ? confirmBulkLoan() : confirmBulkSale();
+        }
+
+        function handleRetailSubmit() {
+            return document.getElementById('retail_is_loan').checked ? confirmRetailLoan() : confirmRetailSale();
+        }
+
+        function confirmBulkLoan() {
+            var opt = document.getElementById('bulk_product_id').options[document.getElementById('bulk_product_id').selectedIndex];
+            var qty = document.getElementById('bulk_quantity').value;
+            var price = parseFloat(document.getElementById('bulk_selling_price').value);
+            return confirm(
+                'Register as Loan?\n\n' +
+                'Product: ' + opt.dataset.productName + '\n' +
+                'Packages: ' + qty + '\n' +
+                'Price/Package: RWF ' + price.toLocaleString() + '\n' +
+                'Total Owed: RWF ' + (qty * price).toLocaleString() + '\n' +
+                'Client: ' + document.getElementById('bulk_customer').value + '\n\n' +
+                'Stock will be deducted. Payment is deferred.'
+            );
+        }
+
+        function confirmRetailLoan() {
+            var opt = document.getElementById('retail_product_id').options[document.getElementById('retail_product_id').selectedIndex];
+            var qty = document.getElementById('pieces_sold').value;
+            var price = parseFloat(document.getElementById('retail_selling_price').value);
+            return confirm(
+                'Register as Loan?\n\n' +
+                'Product: ' + opt.dataset.productName + '\n' +
+                'Pieces: ' + qty + '\n' +
+                'Price/Piece: RWF ' + price.toLocaleString() + '\n' +
+                'Total Owed: RWF ' + (qty * price).toLocaleString() + '\n' +
+                'Client: ' + document.getElementById('retail_customer').value + '\n\n' +
+                'Stock will be deducted. Payment is deferred.'
             );
         }
 
