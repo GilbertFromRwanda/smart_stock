@@ -174,6 +174,10 @@ if ($name_filter)            $where_parts[] = "l.client LIKE '%$name_filter%'";
 $where = $where_parts ? "WHERE " . implode(" AND ", $where_parts) : "";
 $limit = ($date_from || $date_to || $name_filter) ? "" : " LIMIT 100";
 
+// Default to showing only unpaid loans; pass status=all to see everything
+$show_all = ($status_filter === 'all');
+$having = $show_all ? "" : "HAVING l.amount > COALESCE(SUM(lp.amount_paid), 0)";
+
 $records = mysqli_query($conn, "
     SELECT l.*, p.name AS product_name, p.category AS product_category,
         COALESCE(SUM(lp.amount_paid), 0) AS total_paid
@@ -182,6 +186,7 @@ $records = mysqli_query($conn, "
     LEFT JOIN loan_payments lp ON lp.loan_id = l.id
     $where
     GROUP BY l.id
+    $having
     ORDER BY l.loan_date DESC, l.id DESC $limit
 ");
 
@@ -287,9 +292,17 @@ $stats_outstanding = $stats['total_amount'] - $stats['total_paid'];
                 <label>Client Name</label>
                 <input type="text" id="liveClientSearch" name="name" value="<?php echo htmlspecialchars($name_filter); ?>" placeholder="Search name..." autocomplete="off">
             </div>
+            <input type="hidden" name="status" value="<?php echo htmlspecialchars($status_filter); ?>">
             <button type="submit" class="btn btn-primary">Filter</button>
+            <?php if ($show_all): ?>
+                <a href="loans.php?<?php echo http_build_query(['date_from'=>$date_from,'date_to'=>$date_to,'name'=>$name_filter]); ?>"
+                   class="btn btn-secondary">Unpaid Only</a>
+            <?php else: ?>
+                <a href="loans.php?status=all&<?php echo http_build_query(['date_from'=>$date_from,'date_to'=>$date_to,'name'=>$name_filter]); ?>"
+                   class="btn btn-secondary">Show All</a>
+            <?php endif; ?>
             <?php if ($date_from || $date_to || $name_filter): ?>
-                <a href="loans.php" class="btn btn-secondary">Clear</a>
+                <a href="loans.php<?php echo $show_all ? '?status=all' : ''; ?>" class="btn btn-secondary">Clear</a>
             <?php endif; ?>
         </form>
 
