@@ -735,11 +735,11 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                 </div>
                 <div class="form-group">
                     <label for="edit_bulk_qty">Quantity (Packages)*</label>
-                    <input type="number" id="edit_bulk_qty" name="quantity" required min="1" oninput="calcEditBulkTotal()">
+                    <input type="text" id="edit_bulk_qty" name="quantity" required min="1" oninput="calcEditBulkTotal()">
                 </div>
                 <div class="form-group">
                     <label for="edit_bulk_price">Selling Price (per package)*</label>
-                    <input type="number" id="edit_bulk_price" name="selling_price" required min="1" oninput="calcEditBulkTotal()">
+                    <input type="text" id="edit_bulk_price" name="selling_price" required min="1" oninput="calcEditBulkTotal()">
                 </div>
                 <div class="form-group">
                     <label for="edit_bulk_customer">Customer Name</label>
@@ -770,11 +770,11 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                 </div>
                 <div class="form-group">
                     <label for="edit_retail_qty">Number of Pieces*</label>
-                    <input type="number" id="edit_retail_qty" name="pieces_sold" required min="1" oninput="calcEditRetailTotal()">
+                    <input type="text" id="edit_retail_qty" name="pieces_sold" required min="1" oninput="calcEditRetailTotal()">
                 </div>
                 <div class="form-group">
                     <label for="edit_retail_price">Selling Price (per piece)*</label>
-                    <input type="number" id="edit_retail_price" name="selling_price" required min="1" oninput="calcEditRetailTotal()">
+                    <input type="text" id="edit_retail_price" name="selling_price" required min="1" oninput="calcEditRetailTotal()">
                 </div>
                 <div class="form-group">
                     <label for="edit_retail_customer">Customer Name</label>
