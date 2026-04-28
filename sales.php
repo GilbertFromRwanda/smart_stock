@@ -214,6 +214,7 @@ $retail_products = mysqli_query($conn, "
 // Date filter (default: today)
 $date_from = $_GET['date_from'] ?? date('Y-m-d');
 $date_to = $_GET['date_to'] ?? date('Y-m-d');
+$active_tab = in_array($_GET['tab'] ?? '', ['bulk', 'retail']) ? $_GET['tab'] : null;
 $date_from_safe = mysqli_real_escape_string($conn, $date_from);
 $date_to_safe = mysqli_real_escape_string($conn, $date_to);
 
@@ -324,7 +325,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
             
             <div class="recent-sales">
                 <h2>Recent Sales</h2>
-                <form method="GET" class="date-filter-form">
+                <form method="GET" class="date-filter-form" id="filter-form">
                     <div class="date-filter-group">
                         <label for="date_from">From</label>
                         <input type="date" id="date_from" name="date_from" value="<?php echo htmlspecialchars($date_from); ?>">
@@ -333,16 +334,18 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                         <label for="date_to">To</label>
                         <input type="date" id="date_to" name="date_to" value="<?php echo htmlspecialchars($date_to); ?>">
                     </div>
+                    <input type="hidden" name="tab" id="filter-tab" value="<?php echo htmlspecialchars($active_tab ?? ($last_sale_type === 'retail' ? 'retail' : 'bulk')); ?>">
                     <button type="submit" class="btn btn-primary btn-sm">Filter</button>
                     <a href="sales.php" class="btn btn-sm" style="background:var(--gray-200);color:var(--dark);">Today</a>
                 </form>
                 <div class="sales-tabs">
                     <div class="sales-tab-nav">
-                        <button class="sales-tab-btn<?php echo ($last_sale_type !== 'retail') ? ' active' : ''; ?>" id="tab-btn-bulk" onclick="switchSalesTab('bulk')">Ibyaranguwe</button>
-                        <button class="sales-tab-btn<?php echo ($last_sale_type === 'retail') ? ' active' : ''; ?>" id="tab-btn-retail" onclick="switchSalesTab('retail')">Ibyacurujwe detaye</button>
+                        <?php $show_retail = ($active_tab ?? $last_sale_type) === 'retail'; ?>
+                        <button class="sales-tab-btn<?php echo !$show_retail ? ' active' : ''; ?>" id="tab-btn-bulk" onclick="switchSalesTab('bulk')">Ibyaranguwe</button>
+                        <button class="sales-tab-btn<?php echo $show_retail ? ' active' : ''; ?>" id="tab-btn-retail" onclick="switchSalesTab('retail')">Ibyacurujwe detaye</button>
                     </div>
 
-                    <div class="sales-tab-panel" id="tab-panel-bulk" <?php echo ($last_sale_type === 'retail') ? 'style="display:none"' : ''; ?>>
+                    <div class="sales-tab-panel" id="tab-panel-bulk" <?php echo $show_retail ? 'style="display:none"' : ''; ?>>
                         <table class="table">
                             <thead>
                                 <tr>
@@ -363,7 +366,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     $default_price_query = mysqli_query($conn, "SELECT package_price FROM stock WHERE product_id = {$row['product_id']}");
                                     $default_price = mysqli_fetch_assoc($default_price_query)['package_price'];
                                     $price_diff = $row['package_price'] - $default_price;
-                                    $diff_class = $price_diff > 0 ? 'text-danger' : ($price_diff < 0 ? 'text-success' : '');
+                                    $diff_class = $price_diff > 0 ? 'text-success' : ($price_diff < 0 ? 'text-danger' : '');
                                 ?>
                                 <tr>
                                     <td><?php echo date('Y-m-d', strtotime($row['sale_date'])); ?></td>
@@ -404,7 +407,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                         </table>
                     </div>
 
-                    <div class="sales-tab-panel" id="tab-panel-retail" <?php echo ($last_sale_type !== 'retail') ? 'style="display:none"' : ''; ?>>
+                    <div class="sales-tab-panel" id="tab-panel-retail" <?php echo !$show_retail ? 'style="display:none"' : ''; ?>>
                         <table class="table">
                             <thead>
                                 <tr>
@@ -425,7 +428,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     $default_price_query = mysqli_query($conn, "SELECT retail_price FROM retail_stock WHERE product_id = {$row['product_id']}");
                                     $default_price = mysqli_fetch_assoc($default_price_query)['retail_price'];
                                     $price_diff = $row['retail_price'] - $default_price;
-                                    $diff_class = $price_diff > 0 ? 'text-danger' : ($price_diff < 0 ? 'text-success' : '');
+                                    $diff_class = $price_diff > 0 ? 'text-success' : ($price_diff < 0 ? 'text-danger' : '');
                                 ?>
                                 <tr>
                                     <td><?php echo date('Y-m-d', strtotime($row['sale_date'])); ?></td>
@@ -1236,6 +1239,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
             document.getElementById('tab-panel-retail').style.display = tab === 'retail' ? '' : 'none';
             document.getElementById('tab-btn-bulk').classList.toggle('active',   tab === 'bulk');
             document.getElementById('tab-btn-retail').classList.toggle('active', tab === 'retail');
+            document.getElementById('filter-tab').value = tab;
         }
 
         document.addEventListener('DOMContentLoaded', function() {
