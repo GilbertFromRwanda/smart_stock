@@ -18,8 +18,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_sale'])) {
     if ($stock && $stock['quantity'] >= $quantity) {
         $total_amount = $quantity * $selling_price;
 
+        $sale_date = !empty($_POST['sale_date']) ? mysqli_real_escape_string($conn, $_POST['sale_date']) : date('Y-m-d');
         $sale_query = "INSERT INTO sales_bulk (product_id, quantity, package_price, total_amount, sale_date, customer_name)
-                       VALUES ($product_id, $quantity, $selling_price, $total_amount, CURDATE(), '$customer_name')";
+                       VALUES ($product_id, $quantity, $selling_price, $total_amount, '$sale_date', '$customer_name')";
 
         if (mysqli_query($conn, $sale_query)) {
             mysqli_query($conn, "UPDATE stock SET quantity = quantity - $quantity WHERE product_id = $product_id");
@@ -46,8 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_sale'])) {
     if ($retail && $retail['pieces_quantity'] >= $pieces_sold) {
         $total_amount = $pieces_sold * $selling_price;
 
+        $sale_date = !empty($_POST['sale_date']) ? mysqli_real_escape_string($conn, $_POST['sale_date']) : date('Y-m-d');
         $sale_query = "INSERT INTO sales_retail (product_id, pieces_sold, retail_price, total_amount, sale_date, customer_name)
-                       VALUES ($product_id, $pieces_sold, $selling_price, $total_amount, CURDATE(), '$customer_name')";
+                       VALUES ($product_id, $pieces_sold, $selling_price, $total_amount, '$sale_date', '$customer_name')";
 
         if (mysqli_query($conn, $sale_query)) {
             mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity - $pieces_sold WHERE product_id = $product_id");
@@ -87,6 +89,66 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_loan'])) {
         $_SESSION['flash_sale_type'] = 'retail';
     } else {
         $_SESSION['flash_error'] = "Failed to register loan.";
+    }
+    header("Location: sales.php"); exit;
+}
+
+// Handle Edit Bulk Sale
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_bulk_sale'])) {
+    $id        = (int)$_POST['sale_id'];
+    $new_qty   = (int)$_POST['quantity'];
+    $new_price = (float)$_POST['selling_price'];
+    $customer  = mysqli_real_escape_string($conn, trim($_POST['customer_name']));
+    $sale_date = mysqli_real_escape_string($conn, $_POST['sale_date']);
+
+    $orig = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM sales_bulk WHERE id = $id"));
+    if ($orig) {
+        $old_qty    = (int)$orig['quantity'];
+        $product_id = (int)$orig['product_id'];
+        $qty_diff   = $new_qty - $old_qty;
+
+        if ($qty_diff > 0) {
+            $stk = mysqli_fetch_assoc(mysqli_query($conn, "SELECT quantity FROM stock WHERE product_id = $product_id"));
+            if (!$stk || $stk['quantity'] < $qty_diff) {
+                $_SESSION['flash_error'] = "Insufficient stock for this edit.";
+                header("Location: sales.php"); exit;
+            }
+        }
+        $new_total = $new_qty * $new_price;
+        mysqli_query($conn, "UPDATE sales_bulk SET quantity=$new_qty, package_price=$new_price, total_amount=$new_total, sale_date='$sale_date', customer_name='$customer' WHERE id=$id");
+        mysqli_query($conn, "UPDATE stock SET quantity = quantity - ($qty_diff) WHERE product_id = $product_id");
+        $_SESSION['flash_success'] = "Bulk sale updated successfully.";
+        $_SESSION['flash_sale_type'] = 'bulk';
+    }
+    header("Location: sales.php"); exit;
+}
+
+// Handle Edit Retail Sale
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_retail_sale'])) {
+    $id        = (int)$_POST['sale_id'];
+    $new_qty   = (int)$_POST['pieces_sold'];
+    $new_price = (float)$_POST['selling_price'];
+    $customer  = mysqli_real_escape_string($conn, trim($_POST['customer_name']));
+    $sale_date = mysqli_real_escape_string($conn, $_POST['sale_date']);
+
+    $orig = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM sales_retail WHERE id = $id"));
+    if ($orig) {
+        $old_qty    = (int)$orig['pieces_sold'];
+        $product_id = (int)$orig['product_id'];
+        $qty_diff   = $new_qty - $old_qty;
+
+        if ($qty_diff > 0) {
+            $stk = mysqli_fetch_assoc(mysqli_query($conn, "SELECT pieces_quantity FROM retail_stock WHERE product_id = $product_id"));
+            if (!$stk || $stk['pieces_quantity'] < $qty_diff) {
+                $_SESSION['flash_error'] = "Insufficient retail stock for this edit.";
+                header("Location: sales.php"); exit;
+            }
+        }
+        $new_total = $new_qty * $new_price;
+        mysqli_query($conn, "UPDATE sales_retail SET pieces_sold=$new_qty, retail_price=$new_price, total_amount=$new_total, sale_date='$sale_date', customer_name='$customer' WHERE id=$id");
+        mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity - ($qty_diff) WHERE product_id = $product_id");
+        $_SESSION['flash_success'] = "Retail sale updated successfully.";
+        $_SESSION['flash_sale_type'] = 'retail';
     }
     header("Location: sales.php"); exit;
 }
@@ -274,13 +336,13 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                     <button type="submit" class="btn btn-primary btn-sm">Filter</button>
                     <a href="sales.php" class="btn btn-sm" style="background:var(--gray-200);color:var(--dark);">Today</a>
                 </form>
-                <div class="sales-tables">
-                    <div class="sales-table-section">
-                        <h3 class="collapsible-header<?php echo ($last_sale_type === 'retail') ? ' collapsed' : ''; ?>" onclick="toggleSection(this)">
-                            Ibyaranguwe
-                            <span class="collapse-icon">&#9660;</span>
-                        </h3>
-                        <div class="collapsible-body<?php echo ($last_sale_type === 'retail') ? ' collapsed' : ''; ?>">
+                <div class="sales-tabs">
+                    <div class="sales-tab-nav">
+                        <button class="sales-tab-btn<?php echo ($last_sale_type !== 'retail') ? ' active' : ''; ?>" id="tab-btn-bulk" onclick="switchSalesTab('bulk')">Ibyaranguwe</button>
+                        <button class="sales-tab-btn<?php echo ($last_sale_type === 'retail') ? ' active' : ''; ?>" id="tab-btn-retail" onclick="switchSalesTab('retail')">Ibyacurujwe detaye</button>
+                    </div>
+
+                    <div class="sales-tab-panel" id="tab-panel-bulk" <?php echo ($last_sale_type === 'retail') ? 'style="display:none"' : ''; ?>>
                         <table class="table">
                             <thead>
                                 <tr>
@@ -292,6 +354,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     <th>Difference</th>
                                     <th>Total</th>
                                     <th>Customer</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -317,6 +380,17 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     </td>
                                     <td>RWF <?php echo number_format($row['total_amount'], 0); ?></td>
                                     <td><?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?></td>
+                                    <td>
+                                        <button class="btn btn-sm" style="background:var(--primary);color:#fff;padding:3px 10px;"
+                                            onclick="openEditBulkModal(
+                                                <?php echo $row['id']; ?>,
+                                                '<?php echo htmlspecialchars($row['name'], ENT_QUOTES); ?>',
+                                                <?php echo $row['quantity']; ?>,
+                                                <?php echo $row['package_price']; ?>,
+                                                '<?php echo htmlspecialchars($row['customer_name'] ?? '', ENT_QUOTES); ?>',
+                                                '<?php echo $row['sale_date']; ?>'
+                                            )">Edit</button>
+                                    </td>
                                 </tr>
                                 <?php endwhile; ?>
                             </tbody>
@@ -324,19 +398,13 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                 <tr class="table-total-row">
                                     <td colspan="6" style="text-align:right;"><strong>Total:</strong></td>
                                     <td><strong>RWF <?php echo number_format($bulk_grand_total, 0); ?></strong></td>
-                                    <td></td>
+                                    <td colspan="2"></td>
                                 </tr>
                             </tfoot>
                         </table>
-                        </div>
                     </div>
 
-                    <div class="sales-table-section">
-                        <h3 class="collapsible-header<?php echo ($last_sale_type !== 'retail') ? ' collapsed' : ''; ?>" onclick="toggleSection(this)">
-                            Ibyacurujwe detaye
-                            <span class="collapse-icon">&#9660;</span>
-                        </h3>
-                        <div class="collapsible-body<?php echo ($last_sale_type !== 'retail') ? ' collapsed' : ''; ?>">
+                    <div class="sales-tab-panel" id="tab-panel-retail" <?php echo ($last_sale_type !== 'retail') ? 'style="display:none"' : ''; ?>>
                         <table class="table">
                             <thead>
                                 <tr>
@@ -348,6 +416,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     <th>Difference</th>
                                     <th>Total</th>
                                     <th>Customer</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -373,6 +442,17 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     </td>
                                     <td>RWF <?php echo number_format($row['total_amount'], 0); ?></td>
                                     <td><?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?></td>
+                                    <td>
+                                        <button class="btn btn-sm" style="background:var(--primary);color:#fff;padding:3px 10px;"
+                                            onclick="openEditRetailModal(
+                                                <?php echo $row['id']; ?>,
+                                                '<?php echo htmlspecialchars($row['name'], ENT_QUOTES); ?>',
+                                                <?php echo $row['pieces_sold']; ?>,
+                                                <?php echo $row['retail_price']; ?>,
+                                                '<?php echo htmlspecialchars($row['customer_name'] ?? '', ENT_QUOTES); ?>',
+                                                '<?php echo $row['sale_date']; ?>'
+                                            )">Edit</button>
+                                    </td>
                                 </tr>
                                 <?php endwhile; ?>
                             </tbody>
@@ -380,11 +460,10 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                 <tr class="table-total-row">
                                     <td colspan="6" style="text-align:right;"><strong>Total:</strong></td>
                                     <td><strong>RWF <?php echo number_format($retail_grand_total, 0); ?></strong></td>
-                                    <td></td>
+                                    <td colspan="2"></td>
                                 </tr>
                             </tfoot>
                         </table>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -461,6 +540,11 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                     <label for="bulk_customer">Customer Name</label>
                     <input type="text" id="bulk_customer" name="customer_name" value="client"
                            placeholder="Enter customer name">
+                </div>
+
+                <div class="form-group">
+                    <label for="bulk_sale_date">Sale Date</label>
+                    <input type="date" id="bulk_sale_date" name="sale_date" value="<?php echo date('Y-m-d'); ?>">
                 </div>
 
                 <div class="form-group" style="margin-bottom:8px;">
@@ -584,6 +668,11 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                            placeholder="Enter customer name">
                 </div>
 
+                <div class="form-group">
+                    <label for="retail_sale_date">Sale Date</label>
+                    <input type="date" id="retail_sale_date" name="sale_date" value="<?php echo date('Y-m-d'); ?>">
+                </div>
+
                 <div class="form-group" style="margin-bottom:8px;">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                         <input type="checkbox" id="retail_is_loan" onchange="toggleRetailLoan()" style="width:16px;height:16px;cursor:pointer;">
@@ -629,6 +718,76 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                 </div>
 
                 <button type="submit" name="retail_sale" id="retail_submit_btn" class="btn btn-primary" disabled>Save Retail Sale</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Bulk Sale Modal -->
+    <div id="editBulkModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editBulkModal')">&times;</span>
+            <h2>Edit Bulk Sale</h2>
+            <form method="POST" action="" onsubmit="return confirm('Save changes to this sale?')">
+                <input type="hidden" name="sale_id" id="edit_bulk_sale_id">
+                <div class="form-group">
+                    <label>Product</label>
+                    <input type="text" id="edit_bulk_product_name" disabled style="background:var(--gray-100);color:var(--dark);">
+                </div>
+                <div class="form-group">
+                    <label for="edit_bulk_qty">Quantity (Packages)*</label>
+                    <input type="number" id="edit_bulk_qty" name="quantity" required min="1" oninput="calcEditBulkTotal()">
+                </div>
+                <div class="form-group">
+                    <label for="edit_bulk_price">Selling Price (per package)*</label>
+                    <input type="number" id="edit_bulk_price" name="selling_price" required min="1" oninput="calcEditBulkTotal()">
+                </div>
+                <div class="form-group">
+                    <label for="edit_bulk_customer">Customer Name</label>
+                    <input type="text" id="edit_bulk_customer" name="customer_name">
+                </div>
+                <div class="form-group">
+                    <label for="edit_bulk_date">Sale Date</label>
+                    <input type="date" id="edit_bulk_date" name="sale_date" required>
+                </div>
+                <div class="sale-summary">
+                    <div class="summary-row summary-total"><span>Total</span><strong id="edit_bulk_total_display"></strong></div>
+                </div>
+                <button type="submit" name="edit_bulk_sale" class="btn btn-primary">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Retail Sale Modal -->
+    <div id="editRetailModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('editRetailModal')">&times;</span>
+            <h2>Edit Retail Sale</h2>
+            <form method="POST" action="" onsubmit="return confirm('Save changes to this sale?')">
+                <input type="hidden" name="sale_id" id="edit_retail_sale_id">
+                <div class="form-group">
+                    <label>Product</label>
+                    <input type="text" id="edit_retail_product_name" disabled style="background:var(--gray-100);color:var(--dark);">
+                </div>
+                <div class="form-group">
+                    <label for="edit_retail_qty">Number of Pieces*</label>
+                    <input type="number" id="edit_retail_qty" name="pieces_sold" required min="1" oninput="calcEditRetailTotal()">
+                </div>
+                <div class="form-group">
+                    <label for="edit_retail_price">Selling Price (per piece)*</label>
+                    <input type="number" id="edit_retail_price" name="selling_price" required min="1" oninput="calcEditRetailTotal()">
+                </div>
+                <div class="form-group">
+                    <label for="edit_retail_customer">Customer Name</label>
+                    <input type="text" id="edit_retail_customer" name="customer_name">
+                </div>
+                <div class="form-group">
+                    <label for="edit_retail_date">Sale Date</label>
+                    <input type="date" id="edit_retail_date" name="sale_date" required>
+                </div>
+                <div class="sale-summary">
+                    <div class="summary-row summary-total"><span>Total</span><strong id="edit_retail_total_display"></strong></div>
+                </div>
+                <button type="submit" name="edit_retail_sale" class="btn btn-primary">Save Changes</button>
             </form>
         </div>
     </div>
@@ -1036,11 +1195,47 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
             );
         }
 
-        // --- Shared ---
-        function toggleSection(header) {
-            const body = header.nextElementSibling;
-            header.classList.toggle('collapsed');
-            body.classList.toggle('collapsed');
+        // --- Edit Sale Modals ---
+        function openEditBulkModal(id, productName, qty, price, customer, date) {
+            document.getElementById('edit_bulk_sale_id').value = id;
+            document.getElementById('edit_bulk_product_name').value = productName;
+            document.getElementById('edit_bulk_qty').value = qty;
+            document.getElementById('edit_bulk_price').value = price;
+            document.getElementById('edit_bulk_customer').value = customer;
+            document.getElementById('edit_bulk_date').value = date;
+            calcEditBulkTotal();
+            openModal('editBulkModal');
+        }
+
+        function calcEditBulkTotal() {
+            var qty = parseInt(document.getElementById('edit_bulk_qty').value) || 0;
+            var price = parseFloat(document.getElementById('edit_bulk_price').value) || 0;
+            document.getElementById('edit_bulk_total_display').textContent = 'RWF ' + (qty * price).toLocaleString();
+        }
+
+        function openEditRetailModal(id, productName, qty, price, customer, date) {
+            document.getElementById('edit_retail_sale_id').value = id;
+            document.getElementById('edit_retail_product_name').value = productName;
+            document.getElementById('edit_retail_qty').value = qty;
+            document.getElementById('edit_retail_price').value = price;
+            document.getElementById('edit_retail_customer').value = customer;
+            document.getElementById('edit_retail_date').value = date;
+            calcEditRetailTotal();
+            openModal('editRetailModal');
+        }
+
+        function calcEditRetailTotal() {
+            var qty = parseInt(document.getElementById('edit_retail_qty').value) || 0;
+            var price = parseFloat(document.getElementById('edit_retail_price').value) || 0;
+            document.getElementById('edit_retail_total_display').textContent = 'RWF ' + (qty * price).toLocaleString();
+        }
+
+        // --- Sales Tabs ---
+        function switchSalesTab(tab) {
+            document.getElementById('tab-panel-bulk').style.display   = tab === 'bulk'   ? '' : 'none';
+            document.getElementById('tab-panel-retail').style.display = tab === 'retail' ? '' : 'none';
+            document.getElementById('tab-btn-bulk').classList.toggle('active',   tab === 'bulk');
+            document.getElementById('tab-btn-retail').classList.toggle('active', tab === 'retail');
         }
 
         document.addEventListener('DOMContentLoaded', function() {

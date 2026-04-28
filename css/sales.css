@@ -552,3 +552,37 @@
     .dark .price-value {
         color: #f1f5f9;
     }
+
+/* Sales Tabs */
+.sales-tabs {
+    margin-top: 16px;
+}
+
+.sales-tab-nav {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--gray-200, #e5e7eb);
+    margin-bottom: 16px;
+}
+
+.sales-tab-btn {
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    color: var(--secondary, #64748b);
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.sales-tab-btn:hover {
+    color: var(--primary, #2563eb);
+}
+
+.sales-tab-btn.active {
+    color: var(--primary, #2563eb);
+    border-bottom-color: var(--primary, #2563eb);
+}
