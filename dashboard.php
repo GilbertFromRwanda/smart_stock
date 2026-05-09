@@ -49,34 +49,38 @@ $low_stock_query = mysqli_query($conn, "
 // ============== SALES STATISTICS ==============
 // Today's sales
 $today_sales_query = mysqli_query($conn, "
-    SELECT 
+    SELECT
         COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today'), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today'), 0) as total,
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today'), 0) +
+        COALESCE((SELECT COALESCE(SUM(lp.amount_paid),0) FROM loan_payments lp WHERE lp.payment_date = '$today'), 0) as total,
         COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today'), 0) as bulk_total,
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today'), 0) as retail_total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today'), 0) as retail_total,
+        COALESCE((SELECT COALESCE(SUM(lp.amount_paid),0) FROM loan_payments lp WHERE lp.payment_date = '$today'), 0) as loan_total
 ");
 $today_sales = mysqli_fetch_assoc($today_sales_query);
 
 // This week's sales
 $week_sales_query = mysqli_query($conn, "
-    SELECT 
+    SELECT
         COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$week_start' AND '$week_end'), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$week_start' AND '$week_end'), 0) as total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$week_start' AND '$week_end'), 0) +
+        COALESCE((SELECT COALESCE(SUM(lp.amount_paid),0) FROM loan_payments lp WHERE lp.payment_date BETWEEN '$week_start' AND '$week_end'), 0) as total
 ");
 $week_sales = mysqli_fetch_assoc($week_sales_query)['total'] ?? 0;
 
 // This month's sales
 $month_sales_query = mysqli_query($conn, "
-    SELECT 
+    SELECT
         COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$month_start' AND '$month_end'), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$month_start' AND '$month_end'), 0) as total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$month_start' AND '$month_end'), 0) +
+        COALESCE((SELECT COALESCE(SUM(lp.amount_paid),0) FROM loan_payments lp WHERE lp.payment_date BETWEEN '$month_start' AND '$month_end'), 0) as total
 ");
 $month_sales = mysqli_fetch_assoc($month_sales_query)['total'] ?? 0;
 
 // ============== PROFIT STATISTICS ==============
 // Today's profit (with cost calculation)
 $today_profit_query = mysqli_query($conn, "
-    SELECT 
+    SELECT
         -- Bulk sales profit
         COALESCE((
             SELECT SUM(sb.total_amount - (pu.cost_price * sb.quantity))
@@ -84,9 +88,9 @@ $today_profit_query = mysqli_query($conn, "
             JOIN purchases pu ON pu.product_id = sb.product_id
             WHERE sb.sale_date = '$today'
             AND pu.id = (
-                SELECT id FROM purchases p2 
-                WHERE p2.product_id = sb.product_id 
-                AND p2.purchase_date <= sb.sale_date 
+                SELECT id FROM purchases p2
+                WHERE p2.product_id = sb.product_id
+                AND p2.purchase_date <= sb.sale_date
                 ORDER BY p2.purchase_date DESC LIMIT 1
             )
         ), 0) +
@@ -98,11 +102,22 @@ $today_profit_query = mysqli_query($conn, "
             LEFT JOIN stock s ON sr.product_id = s.product_id
             WHERE sr.sale_date = '$today'
             AND pu.id = (
-                SELECT id FROM purchases p2 
-                WHERE p2.product_id = sr.product_id 
-                AND p2.purchase_date <= sr.sale_date 
+                SELECT id FROM purchases p2
+                WHERE p2.product_id = sr.product_id
+                AND p2.purchase_date <= sr.sale_date
                 ORDER BY p2.purchase_date DESC LIMIT 1
             )
+        ), 0) +
+        -- Loan payments profit
+        COALESCE((
+            SELECT SUM(lp.amount_paid - COALESCE(
+                (lp.amount_paid / NULLIF(l.amount, 0)) *
+                (SELECT cost_price FROM purchases WHERE product_id = l.product_id ORDER BY purchase_date DESC LIMIT 1) * l.qty,
+                0
+            ))
+            FROM loan_payments lp
+            JOIN loans l ON l.id = lp.loan_id
+            WHERE lp.payment_date = '$today'
         ), 0) as total_profit
 ");
 $today_profit = mysqli_fetch_assoc($today_profit_query)['total_profit'] ?? 0;
@@ -118,10 +133,11 @@ $week_profit = mysqli_fetch_assoc($week_profit_query)['total_profit'] ?? 0;
 // ============== TRENDING DATA ==============
 // Last 7 days sales for chart
 $last_7_days = mysqli_query($conn, "
-    SELECT 
+    SELECT
         dates.date,
         COALESCE(SUM(sb.total_amount), 0) as bulk_sales,
-        COALESCE(SUM(sr.total_amount), 0) as retail_sales
+        COALESCE(SUM(sr.total_amount), 0) as retail_sales,
+        COALESCE(lp_sum.loan_payments, 0) as loan_payments
     FROM (
         SELECT CURDATE() - INTERVAL (a.a + (10 * b.a) + (100 * c.a)) DAY as date
         FROM (SELECT 0 as a UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) as a
@@ -130,8 +146,13 @@ $last_7_days = mysqli_query($conn, "
     ) as dates
     LEFT JOIN sales_bulk sb ON sb.sale_date = dates.date
     LEFT JOIN sales_retail sr ON sr.sale_date = dates.date
+    LEFT JOIN (
+        SELECT payment_date, SUM(amount_paid) as loan_payments
+        FROM loan_payments
+        GROUP BY payment_date
+    ) as lp_sum ON lp_sum.payment_date = dates.date
     WHERE dates.date BETWEEN CURDATE() - INTERVAL 6 DAY AND CURDATE()
-    GROUP BY dates.date
+    GROUP BY dates.date, lp_sum.loan_payments
     ORDER BY dates.date
 ");
 
@@ -280,21 +301,28 @@ if (($today_sales['total'] ?? 0) == 0) {
                     <div class="stat-trend">
                         <?php 
                         $yesterday_query = mysqli_query($conn, "
-                            SELECT 
-                                COALESCE(SUM(total_amount), 0) as total 
-                            FROM sales_bulk 
+                            SELECT
+                                COALESCE(SUM(total_amount), 0) as total
+                            FROM sales_bulk
                             WHERE sale_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
                         ");
                         $yesterday_bulk = mysqli_fetch_assoc($yesterday_query)['total'] ?? 0;
-                        
+
                         $yesterday_query = mysqli_query($conn, "
-                            SELECT 
-                                COALESCE(SUM(total_amount), 0) as total 
-                            FROM sales_retail 
+                            SELECT
+                                COALESCE(SUM(total_amount), 0) as total
+                            FROM sales_retail
                             WHERE sale_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
                         ");
                         $yesterday_retail = mysqli_fetch_assoc($yesterday_query)['total'] ?? 0;
-                        $yesterday_total = $yesterday_bulk + $yesterday_retail;
+
+                        $yesterday_query = mysqli_query($conn, "
+                            SELECT COALESCE(SUM(lp.amount_paid), 0) as total
+                            FROM loan_payments lp
+                            WHERE lp.payment_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+                        ");
+                        $yesterday_loan = mysqli_fetch_assoc($yesterday_query)['total'] ?? 0;
+                        $yesterday_total = $yesterday_bulk + $yesterday_retail + $yesterday_loan;
                         
                         $trend = ($today_sales['total'] ?? 0) - $yesterday_total;
                         $trend_percent = $yesterday_total > 0 ? ($trend / $yesterday_total) * 100 : 0;
@@ -308,14 +336,15 @@ if (($today_sales['total'] ?? 0) == 0) {
                         <?php endif; ?>
                     </div>
                     <div class="stat-footer">
-                        Bulk: RWF <?php echo number_format($today_sales['bulk_total'] ?? 0, 0); ?> | 
-                        Retail: RWF <?php echo number_format($today_sales['retail_total'] ?? 0, 0); ?>
+                        Bulk: RWF <?php echo number_format($today_sales['bulk_total'] ?? 0, 0); ?> |
+                        Retail: RWF <?php echo number_format($today_sales['retail_total'] ?? 0, 0); ?> |
+                        Loans: RWF <?php echo number_format($today_sales['loan_total'] ?? 0, 0); ?>
                     </div>
                 </div>
                 
                 <div class="stat-card">
                     <div class="stat-icon">💵</div>
-                    <div class="stat-label">Today's Revenue</div>
+                    <div class="stat-label">Today's Profit</div>
                     <div class="stat-number">RWF <?php echo number_format($today_profit, 0); ?></div>
                     <div class="stat-trend">
                         <?php
@@ -604,14 +633,16 @@ if (($today_sales['total'] ?? 0) == 0) {
             const dates = [];
             const bulkSales = [];
             const retailSales = [];
-            
-            <?php 
+            const loanPayments = [];
+
+            <?php
             if ($last_7_days && mysqli_num_rows($last_7_days) > 0) {
                 mysqli_data_seek($last_7_days, 0);
                 while($row = mysqli_fetch_assoc($last_7_days)) {
                     echo "dates.push('" . date('D', strtotime($row['date'])) . "');\n";
                     echo "bulkSales.push(" . ($row['bulk_sales'] ?? 0) . ");\n";
                     echo "retailSales.push(" . ($row['retail_sales'] ?? 0) . ");\n";
+                    echo "loanPayments.push(" . ($row['loan_payments'] ?? 0) . ");\n";
                 }
             }
             ?>
@@ -642,6 +673,16 @@ if (($today_sales['total'] ?? 0) == 0) {
                                 tension: 0.4,
                                 pointRadius: 4,
                                 pointBackgroundColor: 'rgba(245, 87, 108, 1)',
+                            },
+                            {
+                                label: 'Loan Payments',
+                                data: loanPayments,
+                                borderColor: 'rgba(34, 197, 94, 1)',
+                                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                borderWidth: 2,
+                                tension: 0.4,
+                                pointRadius: 4,
+                                pointBackgroundColor: 'rgba(34, 197, 94, 1)',
                             }
                         ]
                     },
