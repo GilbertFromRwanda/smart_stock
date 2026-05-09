@@ -76,9 +76,36 @@ function updateWeeklyRevenue($conn) {
         $retail_profit += ($sale['total_amount'] - $cost);
     }
     
-    $total_revenue = $bulk_total + $retail_total;
-    $total_cost = $bulk_cost_total + $retail_cost_total;
-    $total_profit = $bulk_profit + $retail_profit;
+    // Calculate loan payments as revenue
+    $loan_payment_query = mysqli_query($conn, "
+        SELECT
+            lp.amount_paid,
+            l.qty,
+            l.amount as loan_total,
+            (SELECT cost_price FROM purchases
+             WHERE product_id = l.product_id
+             ORDER BY purchase_date DESC LIMIT 1) as last_cost_price
+        FROM loan_payments lp
+        JOIN loans l ON l.id = lp.loan_id
+        WHERE lp.payment_date BETWEEN '$week_start' AND '$week_end'
+    ");
+
+    $loan_revenue_total = 0;
+    $loan_cost_total = 0;
+    $loan_profit_total = 0;
+
+    while ($payment = mysqli_fetch_assoc($loan_payment_query)) {
+        $loan_revenue_total += $payment['amount_paid'];
+        $proportional_cost = $payment['loan_total'] > 0
+            ? ($payment['amount_paid'] / $payment['loan_total']) * (($payment['last_cost_price'] ?? 0) * $payment['qty'])
+            : 0;
+        $loan_cost_total += $proportional_cost;
+        $loan_profit_total += ($payment['amount_paid'] - $proportional_cost);
+    }
+
+    $total_revenue = $bulk_total + $retail_total + $loan_revenue_total;
+    $total_cost = $bulk_cost_total + $retail_cost_total + $loan_cost_total;
+    $total_profit = $bulk_profit + $retail_profit + $loan_profit_total;
     $profit_margin = $total_revenue > 0 ? ($total_profit / $total_revenue) * 100 : 0;
     
     // Check if record exists for this week
@@ -213,6 +240,46 @@ $current_week_sales = mysqli_query($conn, "
         AND p2.purchase_date <= sr.sale_date
         ORDER BY p2.purchase_date DESC LIMIT 1
     )
+
+    UNION ALL
+
+    -- Loan payments as revenue
+    SELECT
+        'Loan' as sale_type,
+        lp.payment_date as sale_date,
+        p.name as product_name,
+        l.qty as quantity,
+        ROUND(lp.amount_paid / NULLIF(l.qty, 0), 0) as selling_price,
+        lp.amount_paid as total_amount,
+        COALESCE(pu2.cost_price, 0) as purchase_price,
+        COALESCE(
+            (lp.amount_paid / NULLIF(l.amount, 0)) * (pu2.cost_price * l.qty), 0
+        ) as total_cost,
+        lp.amount_paid - COALESCE(
+            (lp.amount_paid / NULLIF(l.amount, 0)) * (pu2.cost_price * l.qty), 0
+        ) as profit,
+        ROUND(
+            CASE
+                WHEN lp.amount_paid > 0
+                THEN ((lp.amount_paid - COALESCE(
+                    (lp.amount_paid / NULLIF(l.amount, 0)) * (pu2.cost_price * l.qty), 0
+                )) / lp.amount_paid * 100)
+                ELSE 0
+            END, 2
+        ) as margin,
+        l.client as customer_name
+    FROM loan_payments lp
+    JOIN loans l ON l.id = lp.loan_id
+    JOIN products p ON p.id = l.product_id
+    LEFT JOIN purchases pu2 ON pu2.product_id = l.product_id
+        AND pu2.id = (
+            SELECT id FROM purchases p3
+            WHERE p3.product_id = l.product_id
+            AND p3.purchase_date <= lp.payment_date
+            ORDER BY p3.purchase_date DESC LIMIT 1
+        )
+    WHERE lp.payment_date BETWEEN '$filter_from' AND '$filter_to'
+
     ORDER BY sale_date DESC
 ");
 
@@ -296,40 +363,52 @@ $product_profitability = mysqli_query($conn, "
 
 // Get total revenue and profit all time - FIXED VERSION
 $total_all_time_query = mysqli_query($conn, "
-    SELECT 
+    SELECT
         COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail), 0) as total_revenue,
-        
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail), 0) +
+        COALESCE((SELECT COALESCE(SUM(lp.amount_paid),0) FROM loan_payments lp), 0) as total_revenue,
+
         COALESCE(
-            (SELECT COALESCE(SUM(pu.cost_price * sb.quantity),0) 
+            (SELECT COALESCE(SUM(pu.cost_price * sb.quantity),0)
              FROM sales_bulk sb
              JOIN purchases pu ON pu.product_id = sb.product_id
              WHERE pu.id = (
-                SELECT id FROM purchases p2 
-                WHERE p2.product_id = sb.product_id 
-                AND p2.purchase_date <= sb.sale_date 
+                SELECT id FROM purchases p2
+                WHERE p2.product_id = sb.product_id
+                AND p2.purchase_date <= sb.sale_date
                 ORDER BY p2.purchase_date DESC LIMIT 1
              )), 0
         ) as total_bulk_cost,
-         
+
         COALESCE(
             (SELECT COALESCE(SUM((pu.cost_price / NULLIF(s.pieces_per_package, 1)) * sr.pieces_sold),0)
              FROM sales_retail sr
              JOIN purchases pu ON pu.product_id = sr.product_id
              LEFT JOIN stock s ON sr.product_id = s.product_id
              WHERE pu.id = (
-                SELECT id FROM purchases p2 
-                WHERE p2.product_id = sr.product_id 
-                AND p2.purchase_date <= sr.sale_date 
+                SELECT id FROM purchases p2
+                WHERE p2.product_id = sr.product_id
+                AND p2.purchase_date <= sr.sale_date
                 ORDER BY p2.purchase_date DESC LIMIT 1
              )), 0
-        ) as total_retail_cost
+        ) as total_retail_cost,
+
+        COALESCE(
+            (SELECT COALESCE(SUM(
+                (lp.amount_paid / NULLIF(l.amount, 0)) *
+                (SELECT cost_price FROM purchases p2
+                 WHERE p2.product_id = l.product_id
+                 ORDER BY p2.purchase_date DESC LIMIT 1) * l.qty
+            ), 0)
+             FROM loan_payments lp
+             JOIN loans l ON l.id = lp.loan_id), 0
+        ) as total_loan_cost
 ");
 
 $total_all_time = mysqli_fetch_assoc($total_all_time_query);
 
-// Calculate total cost and profit
-$total_all_time['total_cost'] = ($total_all_time['total_bulk_cost'] ?? 0) + ($total_all_time['total_retail_cost'] ?? 0);
+// Calculate total cost and profit (including loan payments)
+$total_all_time['total_cost'] = ($total_all_time['total_bulk_cost'] ?? 0) + ($total_all_time['total_retail_cost'] ?? 0) + ($total_all_time['total_loan_cost'] ?? 0);
 $total_all_time['total_profit'] = ($total_all_time['total_revenue'] ?? 0) - $total_all_time['total_cost'];
 
 // Daily revenue for current week (Sunday to Saturday)
@@ -347,9 +426,9 @@ $daily_revenue_query = mysqli_query($conn, "
         DAYNAME(dates.date) as day_name,
         COALESCE(bulk.revenue, 0) as bulk_revenue,
         COALESCE(retail.revenue, 0) as retail_revenue,
-        COALESCE(bulk.revenue, 0) + COALESCE(retail.revenue, 0) as total_revenue,
-        COALESCE(bulk.cost, 0) + COALESCE(retail.cost, 0) as total_cost,
-        (COALESCE(bulk.revenue, 0) + COALESCE(retail.revenue, 0)) - (COALESCE(bulk.cost, 0) + COALESCE(retail.cost, 0)) as profit
+        COALESCE(bulk.revenue, 0) + COALESCE(retail.revenue, 0) + COALESCE(loan_pay.revenue, 0) as total_revenue,
+        COALESCE(bulk.cost, 0) + COALESCE(retail.cost, 0) + COALESCE(loan_pay.cost, 0) as total_cost,
+        (COALESCE(bulk.revenue, 0) + COALESCE(retail.revenue, 0) + COALESCE(loan_pay.revenue, 0)) - (COALESCE(bulk.cost, 0) + COALESCE(retail.cost, 0) + COALESCE(loan_pay.cost, 0)) as profit
     FROM (
         SELECT DATE('$week_sun') + INTERVAL seq DAY as date
         FROM (SELECT 0 as seq UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) as s
@@ -370,6 +449,18 @@ $daily_revenue_query = mysqli_query($conn, "
         FROM sales_retail sr
         GROUP BY sale_date
     ) as retail ON retail.sale_date = dates.date
+    LEFT JOIN (
+        SELECT lp.payment_date as sale_date,
+            SUM(lp.amount_paid) as revenue,
+            SUM(COALESCE(
+                (lp.amount_paid / NULLIF(l.amount, 0)) *
+                (SELECT cost_price FROM purchases WHERE product_id = l.product_id ORDER BY purchase_date DESC LIMIT 1) * l.qty,
+                0
+            )) as cost
+        FROM loan_payments lp
+        JOIN loans l ON l.id = lp.loan_id
+        GROUP BY lp.payment_date
+    ) as loan_pay ON loan_pay.sale_date = dates.date
     ORDER BY dates.date ASC
 ");
 
@@ -383,7 +474,8 @@ $today = date('Y-m-d');
 $today_profit_query = mysqli_query($conn, "
     SELECT
         COALESCE((SELECT SUM(total_amount) FROM sales_bulk WHERE sale_date = '$today'), 0) +
-        COALESCE((SELECT SUM(total_amount) FROM sales_retail WHERE sale_date = '$today'), 0) as today_sales,
+        COALESCE((SELECT SUM(total_amount) FROM sales_retail WHERE sale_date = '$today'), 0) +
+        COALESCE((SELECT SUM(lp.amount_paid) FROM loan_payments lp WHERE lp.payment_date = '$today'), 0) as today_sales,
         COALESCE((
             SELECT SUM(sb.total_amount - (COALESCE((SELECT cost_price FROM purchases WHERE product_id = sb.product_id ORDER BY purchase_date DESC LIMIT 1), 0) * sb.quantity))
             FROM sales_bulk sb WHERE sb.sale_date = '$today'
@@ -393,6 +485,16 @@ $today_profit_query = mysqli_query($conn, "
                 (SELECT cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu, stock s WHERE pu.product_id = sr.product_id AND s.product_id = sr.product_id ORDER BY pu.purchase_date DESC LIMIT 1), 0
             ) * sr.pieces_sold))
             FROM sales_retail sr WHERE sr.sale_date = '$today'
+        ), 0) +
+        COALESCE((
+            SELECT SUM(lp.amount_paid - COALESCE(
+                (lp.amount_paid / NULLIF(l.amount, 0)) *
+                (SELECT cost_price FROM purchases WHERE product_id = l.product_id ORDER BY purchase_date DESC LIMIT 1) * l.qty,
+                0
+            ))
+            FROM loan_payments lp
+            JOIN loans l ON l.id = lp.loan_id
+            WHERE lp.payment_date = '$today'
         ), 0) as today_profit
 ");
 $today_data = mysqli_fetch_assoc($today_profit_query);
