@@ -67,7 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_sale'])) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_loan'])) {
     $product_id = (int)$_POST['product_id'];
     $qty        = (int)$_POST['pieces_sold'];
-    $full_total = (float)$_POST['selling_price'] * $qty;
+    $unit_price = (float)$_POST['selling_price'];
+    $full_total = $unit_price * $qty;
     $amount     = isset($_POST['loan_amount']) && (float)$_POST['loan_amount'] > 0 ? (float)$_POST['loan_amount'] : $full_total;
     $client     = mysqli_real_escape_string($conn, trim($_POST['customer_name']));
     $phone      = mysqli_real_escape_string($conn, trim($_POST['phone'] ?? ''));
@@ -82,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_loan'])) {
         $_SESSION['flash_error'] = "Insufficient retail stock available.";
         header("Location: sales.php"); exit;
     }
-    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date')");
+    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date, sale_type, unit_price) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date','retail','$unit_price')");
     if ($ins) {
         mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity - $qty WHERE product_id = $product_id");
         $_SESSION['flash_success'] = "Loan registered for $client — RWF " . number_format($amount, 0);
@@ -157,7 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_retail_sale'])) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_loan'])) {
     $product_id = (int)$_POST['product_id'];
     $qty        = (int)$_POST['quantity'];
-    $full_total = (float)$_POST['selling_price'] * $qty;
+    $unit_price = (float)$_POST['selling_price'];
+    $full_total = $unit_price * $qty;
     $amount     = isset($_POST['loan_amount']) && (float)$_POST['loan_amount'] > 0 ? (float)$_POST['loan_amount'] : $full_total;
     $client     = mysqli_real_escape_string($conn, trim($_POST['customer_name']));
     $phone      = mysqli_real_escape_string($conn, trim($_POST['phone'] ?? ''));
@@ -172,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_loan'])) {
         $_SESSION['flash_error'] = "Insufficient stock available.";
         header("Location: sales.php"); exit;
     }
-    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date')");
+    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date, sale_type, unit_price) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date','bulk','$unit_price')");
     if ($ins) {
         mysqli_query($conn, "UPDATE stock SET quantity = quantity - $qty WHERE product_id = $product_id");
         $_SESSION['flash_success'] = "Loan registered for $client — RWF " . number_format($amount, 0);
@@ -218,21 +220,39 @@ $active_tab = in_array($_GET['tab'] ?? '', ['bulk', 'retail']) ? $_GET['tab'] : 
 $date_from_safe = mysqli_real_escape_string($conn, $date_from);
 $date_to_safe = mysqli_real_escape_string($conn, $date_to);
 
-// Get sales filtered by date
+// Get sales filtered by date (including loans)
 $recent_bulk_sales = mysqli_query($conn, "
-    SELECT sb.*, p.name
-    FROM sales_bulk sb
-    JOIN products p ON sb.product_id = p.id
-    WHERE sb.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe'
-    ORDER BY sb.created_at DESC
+    (SELECT sb.id, sb.product_id, sb.quantity, sb.package_price, sb.total_amount,
+            sb.sale_date, sb.customer_name, sb.created_at, p.name, 0 AS is_loan
+     FROM sales_bulk sb
+     JOIN products p ON sb.product_id = p.id
+     WHERE sb.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+    UNION ALL
+    (SELECT l.id, l.product_id, l.qty AS quantity,
+            COALESCE(l.unit_price, l.amount / l.qty) AS package_price,
+            l.amount AS total_amount, l.loan_date AS sale_date,
+            l.client AS customer_name, l.created_at, p.name, 1 AS is_loan
+     FROM loans l
+     JOIN products p ON l.product_id = p.id
+     WHERE l.sale_type = 'bulk' AND l.loan_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+    ORDER BY created_at DESC
 ");
 
 $recent_retail_sales = mysqli_query($conn, "
-    SELECT sr.*, p.name
-    FROM sales_retail sr
-    JOIN products p ON sr.product_id = p.id
-    WHERE sr.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe'
-    ORDER BY sr.created_at DESC
+    (SELECT sr.id, sr.product_id, sr.pieces_sold, sr.retail_price, sr.total_amount,
+            sr.sale_date, sr.customer_name, sr.created_at, p.name, 0 AS is_loan
+     FROM sales_retail sr
+     JOIN products p ON sr.product_id = p.id
+     WHERE sr.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+    UNION ALL
+    (SELECT l.id, l.product_id, l.qty AS pieces_sold,
+            COALESCE(l.unit_price, l.amount / l.qty) AS retail_price,
+            l.amount AS total_amount, l.loan_date AS sale_date,
+            l.client AS customer_name, l.created_at, p.name, 1 AS is_loan
+     FROM loans l
+     JOIN products p ON l.product_id = p.id
+     WHERE l.sale_type = 'retail' AND l.loan_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+    ORDER BY created_at DESC
 ");
 
 // Existing loan clients for picker
@@ -301,6 +321,20 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
         .searchable-select-option.hidden {
             display: none;
         }
+        .loan-badge {
+            background: #f59e0b;
+            color: #fff;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-weight: 600;
+            margin-left: 4px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        .loan-row {
+            background: #fffbeb !important;
+        }
     </style>
 </head>
 <body>
@@ -368,7 +402,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     $price_diff = $row['package_price'] - $default_price;
                                     $diff_class = $price_diff > 0 ? 'text-success' : ($price_diff < 0 ? 'text-danger' : '');
                                 ?>
-                                <tr>
+                                <tr <?php echo $row['is_loan'] ? 'class="loan-row"' : ''; ?>>
                                     <td><?php echo date('Y-m-d', strtotime($row['sale_date'])); ?></td>
                                     <td><?php echo htmlspecialchars($row['name']); ?></td>
                                     <td><?php echo $row['quantity']; ?></td>
@@ -382,8 +416,14 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                         <?php endif; ?>
                                     </td>
                                     <td>RWF <?php echo number_format($row['total_amount'], 0); ?></td>
-                                    <td><?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?></td>
                                     <td>
+                                        <?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?>
+                                        <?php if($row['is_loan']): ?>
+                                            <span class="loan-badge">LOAN</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if(!$row['is_loan']): ?>
                                         <button class="btn btn-sm" style="background:var(--primary);color:#fff;padding:3px 10px;"
                                             onclick="openEditBulkModal(
                                                 <?php echo $row['id']; ?>,
@@ -393,6 +433,9 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                                 '<?php echo htmlspecialchars($row['customer_name'] ?? '', ENT_QUOTES); ?>',
                                                 '<?php echo $row['sale_date']; ?>'
                                             )">Edit</button>
+                                        <?php else: ?>
+                                        <a href="loans.php" class="btn btn-sm" style="background:#f59e0b;color:#fff;padding:3px 10px;text-decoration:none;">View</a>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                                 <?php endwhile; ?>
@@ -430,7 +473,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     $price_diff = $row['retail_price'] - $default_price;
                                     $diff_class = $price_diff > 0 ? 'text-success' : ($price_diff < 0 ? 'text-danger' : '');
                                 ?>
-                                <tr>
+                                <tr <?php echo $row['is_loan'] ? 'class="loan-row"' : ''; ?>>
                                     <td><?php echo date('Y-m-d', strtotime($row['sale_date'])); ?></td>
                                     <td><?php echo htmlspecialchars($row['name']); ?></td>
                                     <td><?php echo $row['pieces_sold']; ?></td>
@@ -444,8 +487,14 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                         <?php endif; ?>
                                     </td>
                                     <td>RWF <?php echo number_format($row['total_amount'], 0); ?></td>
-                                    <td><?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?></td>
                                     <td>
+                                        <?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?>
+                                        <?php if($row['is_loan']): ?>
+                                            <span class="loan-badge">LOAN</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if(!$row['is_loan']): ?>
                                         <button class="btn btn-sm" style="background:var(--primary);color:#fff;padding:3px 10px;"
                                             onclick="openEditRetailModal(
                                                 <?php echo $row['id']; ?>,
@@ -455,6 +504,9 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                                 '<?php echo htmlspecialchars($row['customer_name'] ?? '', ENT_QUOTES); ?>',
                                                 '<?php echo $row['sale_date']; ?>'
                                             )">Edit</button>
+                                        <?php else: ?>
+                                        <a href="loans.php" class="btn btn-sm" style="background:#f59e0b;color:#fff;padding:3px 10px;text-decoration:none;">View</a>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                                 <?php endwhile; ?>

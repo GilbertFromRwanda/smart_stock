@@ -21,18 +21,17 @@ function updateWeeklyRevenue($conn) {
     $week_start = date('Y-m-d', strtotime('monday this week'));
     $week_end = date('Y-m-d', strtotime('sunday this week'));
     
-    // Calculate bulk sales with cost analysis
+    // Calculate bulk sales with cost analysis (including loans)
     $bulk_query = mysqli_query($conn, "
-        SELECT 
-            sb.*,
-            p.name as product_name,
-            (SELECT cost_price FROM purchases 
-             WHERE product_id = sb.product_id 
-             ORDER BY purchase_date DESC LIMIT 1) as last_cost_price,
-            (SELECT package_price FROM stock WHERE product_id = sb.product_id) as default_price
-        FROM sales_bulk sb
-        JOIN products p ON sb.product_id = p.id
-        WHERE sb.sale_date BETWEEN '$week_start' AND '$week_end'
+        SELECT t.product_id, t.quantity, t.total_amount,
+            (SELECT cost_price FROM purchases WHERE product_id = t.product_id ORDER BY purchase_date DESC LIMIT 1) as last_cost_price
+        FROM (
+            SELECT sb.product_id, sb.quantity, sb.total_amount
+            FROM sales_bulk sb WHERE sb.sale_date BETWEEN '$week_start' AND '$week_end'
+            UNION ALL
+            SELECT l.product_id, l.qty AS quantity, COALESCE(l.unit_price * l.qty, l.amount) AS total_amount
+            FROM loans l WHERE l.sale_type = 'bulk' AND l.loan_date BETWEEN '$week_start' AND '$week_end'
+        ) t
     ");
     
     $bulk_total = 0;
@@ -46,20 +45,19 @@ function updateWeeklyRevenue($conn) {
         $bulk_profit += ($sale['total_amount'] - $cost);
     }
     
-    // Calculate retail sales with cost analysis
+    // Calculate retail sales with cost analysis (including loans)
     $retail_query = mysqli_query($conn, "
-        SELECT 
-            sr.*,
-            p.name as product_name,
-            (SELECT cost_price FROM purchases 
-             WHERE product_id = sr.product_id 
-             ORDER BY purchase_date DESC LIMIT 1) as last_cost_price,
-            COALESCE(s.pieces_per_package, 1) as pieces_per_package,
-            s.retail_price as default_price
-        FROM sales_retail sr
-        JOIN products p ON sr.product_id = p.id
-        LEFT JOIN stock s ON sr.product_id = s.product_id
-        WHERE sr.sale_date BETWEEN '$week_start' AND '$week_end'
+        SELECT t.product_id, t.pieces_sold, t.total_amount,
+            (SELECT cost_price FROM purchases WHERE product_id = t.product_id ORDER BY purchase_date DESC LIMIT 1) as last_cost_price,
+            COALESCE(s.pieces_per_package, 1) as pieces_per_package
+        FROM (
+            SELECT sr.product_id, sr.pieces_sold, sr.total_amount
+            FROM sales_retail sr WHERE sr.sale_date BETWEEN '$week_start' AND '$week_end'
+            UNION ALL
+            SELECT l.product_id, l.qty AS pieces_sold, COALESCE(l.unit_price * l.qty, l.amount) AS total_amount
+            FROM loans l WHERE l.sale_type = 'retail' AND l.loan_date BETWEEN '$week_start' AND '$week_end'
+        ) t
+        LEFT JOIN stock s ON t.product_id = s.product_id
     ");
     
     $retail_total = 0;
@@ -149,7 +147,7 @@ if (!$current_week) {
 $filter_from = isset($_GET['from']) ? mysqli_real_escape_string($conn, $_GET['from']) : date('Y-m-d', strtotime('monday this week'));
 $filter_to = isset($_GET['to']) ? mysqli_real_escape_string($conn, $_GET['to']) : date('Y-m-d', strtotime('sunday this week'));
 
-// Get detailed sales with profit analysis for filtered date range
+// Get detailed sales with profit analysis for filtered date range (including loans)
 $current_week_sales = mysqli_query($conn, "
     -- Bulk sales with profit
     SELECT
@@ -163,11 +161,9 @@ $current_week_sales = mysqli_query($conn, "
         COALESCE(pu.cost_price * sb.quantity, 0) as total_cost,
         (sb.total_amount - COALESCE(pu.cost_price * sb.quantity, 0)) as profit,
         ROUND(
-            CASE
-                WHEN sb.total_amount > 0
+            CASE WHEN sb.total_amount > 0
                 THEN ((sb.total_amount - COALESCE(pu.cost_price * sb.quantity, 0)) / sb.total_amount * 100)
-                ELSE 0
-            END, 2
+                ELSE 0 END, 2
         ) as margin,
         sb.customer_name
     FROM sales_bulk sb
@@ -175,10 +171,8 @@ $current_week_sales = mysqli_query($conn, "
     LEFT JOIN purchases pu ON pu.product_id = sb.product_id
     WHERE sb.sale_date BETWEEN '$filter_from' AND '$filter_to'
     AND pu.id = (
-        SELECT id FROM purchases p2
-        WHERE p2.product_id = sb.product_id
-        AND p2.purchase_date <= sb.sale_date
-        ORDER BY p2.purchase_date DESC LIMIT 1
+        SELECT id FROM purchases p2 WHERE p2.product_id = sb.product_id
+        AND p2.purchase_date <= sb.sale_date ORDER BY p2.purchase_date DESC LIMIT 1
     )
 
     UNION ALL
@@ -195,11 +189,9 @@ $current_week_sales = mysqli_query($conn, "
         COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * sr.pieces_sold, 0) as total_cost,
         (sr.total_amount - COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * sr.pieces_sold, 0)) as profit,
         ROUND(
-            CASE
-                WHEN sr.total_amount > 0
+            CASE WHEN sr.total_amount > 0
                 THEN ((sr.total_amount - COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * sr.pieces_sold, 0)) / sr.total_amount * 100)
-                ELSE 0
-            END, 2
+                ELSE 0 END, 2
         ) as margin,
         sr.customer_name
     FROM sales_retail sr
@@ -208,11 +200,61 @@ $current_week_sales = mysqli_query($conn, "
     LEFT JOIN stock s ON sr.product_id = s.product_id
     WHERE sr.sale_date BETWEEN '$filter_from' AND '$filter_to'
     AND pu.id = (
-        SELECT id FROM purchases p2
-        WHERE p2.product_id = sr.product_id
-        AND p2.purchase_date <= sr.sale_date
-        ORDER BY p2.purchase_date DESC LIMIT 1
+        SELECT id FROM purchases p2 WHERE p2.product_id = sr.product_id
+        AND p2.purchase_date <= sr.sale_date ORDER BY p2.purchase_date DESC LIMIT 1
     )
+
+    UNION ALL
+
+    -- Bulk loans as revenue
+    SELECT
+        'Bulk (Loan)' as sale_type,
+        l.loan_date as sale_date,
+        p.name as product_name,
+        l.qty as quantity,
+        COALESCE(l.unit_price, l.amount / l.qty) as selling_price,
+        COALESCE(l.unit_price * l.qty, l.amount) as total_amount,
+        COALESCE(pu.cost_price, 0) as purchase_price,
+        COALESCE(pu.cost_price * l.qty, 0) as total_cost,
+        (COALESCE(l.unit_price * l.qty, l.amount) - COALESCE(pu.cost_price * l.qty, 0)) as profit,
+        ROUND(
+            CASE WHEN COALESCE(l.unit_price * l.qty, l.amount) > 0
+                THEN ((COALESCE(l.unit_price * l.qty, l.amount) - COALESCE(pu.cost_price * l.qty, 0)) / COALESCE(l.unit_price * l.qty, l.amount) * 100)
+                ELSE 0 END, 2
+        ) as margin,
+        l.client as customer_name
+    FROM loans l
+    JOIN products p ON l.product_id = p.id
+    LEFT JOIN purchases pu ON pu.product_id = l.product_id
+        AND pu.id = (SELECT id FROM purchases p2 WHERE p2.product_id = l.product_id AND p2.purchase_date <= l.loan_date ORDER BY p2.purchase_date DESC LIMIT 1)
+    WHERE l.sale_type = 'bulk' AND l.loan_date BETWEEN '$filter_from' AND '$filter_to'
+
+    UNION ALL
+
+    -- Retail loans as revenue
+    SELECT
+        'Retail (Loan)' as sale_type,
+        l.loan_date as sale_date,
+        p.name as product_name,
+        l.qty as quantity,
+        COALESCE(l.unit_price, l.amount / l.qty) as selling_price,
+        COALESCE(l.unit_price * l.qty, l.amount) as total_amount,
+        COALESCE(pu.cost_price, 0) as purchase_price,
+        COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * l.qty, 0) as total_cost,
+        (COALESCE(l.unit_price * l.qty, l.amount) - COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * l.qty, 0)) as profit,
+        ROUND(
+            CASE WHEN COALESCE(l.unit_price * l.qty, l.amount) > 0
+                THEN ((COALESCE(l.unit_price * l.qty, l.amount) - COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * l.qty, 0)) / COALESCE(l.unit_price * l.qty, l.amount) * 100)
+                ELSE 0 END, 2
+        ) as margin,
+        l.client as customer_name
+    FROM loans l
+    JOIN products p ON l.product_id = p.id
+    LEFT JOIN purchases pu ON pu.product_id = l.product_id
+        AND pu.id = (SELECT id FROM purchases p2 WHERE p2.product_id = l.product_id AND p2.purchase_date <= l.loan_date ORDER BY p2.purchase_date DESC LIMIT 1)
+    LEFT JOIN stock s ON l.product_id = s.product_id
+    WHERE l.sale_type = 'retail' AND l.loan_date BETWEEN '$filter_from' AND '$filter_to'
+
     ORDER BY sale_date DESC
 ");
 
@@ -296,9 +338,10 @@ $product_profitability = mysqli_query($conn, "
 
 // Get total revenue and profit all time - FIXED VERSION
 $total_all_time_query = mysqli_query($conn, "
-    SELECT 
+    SELECT
         COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail), 0) as total_revenue,
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail), 0) +
+        COALESCE((SELECT COALESCE(SUM(COALESCE(unit_price*qty, amount)),0) FROM loans), 0) as total_revenue,
         
         COALESCE(
             (SELECT COALESCE(SUM(pu.cost_price * sb.quantity),0) 
@@ -355,20 +398,26 @@ $daily_revenue_query = mysqli_query($conn, "
         FROM (SELECT 0 as seq UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) as s
     ) as dates
     LEFT JOIN (
-        SELECT sale_date,
-            SUM(total_amount) as revenue,
-            SUM(COALESCE((SELECT cost_price FROM purchases WHERE product_id = sb.product_id ORDER BY purchase_date DESC LIMIT 1), 0) * sb.quantity) as cost
-        FROM sales_bulk sb
-        GROUP BY sale_date
+        SELECT sale_date, SUM(revenue) as revenue, SUM(cost) as cost FROM (
+            SELECT sb.sale_date, sb.total_amount as revenue,
+                COALESCE((SELECT cost_price FROM purchases WHERE product_id = sb.product_id ORDER BY purchase_date DESC LIMIT 1), 0) * sb.quantity as cost
+            FROM sales_bulk sb
+            UNION ALL
+            SELECT l.loan_date, COALESCE(l.unit_price * l.qty, l.amount),
+                COALESCE((SELECT cost_price FROM purchases WHERE product_id = l.product_id ORDER BY purchase_date DESC LIMIT 1), 0) * l.qty
+            FROM loans l WHERE l.sale_type = 'bulk'
+        ) bd GROUP BY sale_date
     ) as bulk ON bulk.sale_date = dates.date
     LEFT JOIN (
-        SELECT sale_date,
-            SUM(total_amount) as revenue,
-            SUM(COALESCE(
-                (SELECT cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu, stock s WHERE pu.product_id = sr.product_id AND s.product_id = sr.product_id ORDER BY pu.purchase_date DESC LIMIT 1), 0
-            ) * sr.pieces_sold) as cost
-        FROM sales_retail sr
-        GROUP BY sale_date
+        SELECT sale_date, SUM(revenue) as revenue, SUM(cost) as cost FROM (
+            SELECT sr.sale_date, sr.total_amount as revenue,
+                COALESCE((SELECT cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu, stock s WHERE pu.product_id = sr.product_id AND s.product_id = sr.product_id ORDER BY pu.purchase_date DESC LIMIT 1), 0) * sr.pieces_sold as cost
+            FROM sales_retail sr
+            UNION ALL
+            SELECT l.loan_date, COALESCE(l.unit_price * l.qty, l.amount),
+                COALESCE((SELECT cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu, stock s WHERE pu.product_id = l.product_id AND s.product_id = l.product_id ORDER BY pu.purchase_date DESC LIMIT 1), 0) * l.qty
+            FROM loans l WHERE l.sale_type = 'retail'
+        ) rd GROUP BY sale_date
     ) as retail ON retail.sale_date = dates.date
     ORDER BY dates.date ASC
 ");
@@ -383,7 +432,8 @@ $today = date('Y-m-d');
 $today_profit_query = mysqli_query($conn, "
     SELECT
         COALESCE((SELECT SUM(total_amount) FROM sales_bulk WHERE sale_date = '$today'), 0) +
-        COALESCE((SELECT SUM(total_amount) FROM sales_retail WHERE sale_date = '$today'), 0) as today_sales,
+        COALESCE((SELECT SUM(total_amount) FROM sales_retail WHERE sale_date = '$today'), 0) +
+        COALESCE((SELECT SUM(COALESCE(unit_price*qty, amount)) FROM loans WHERE loan_date = '$today'), 0) as today_sales,
         COALESCE((
             SELECT SUM(sb.total_amount - (COALESCE((SELECT cost_price FROM purchases WHERE product_id = sb.product_id ORDER BY purchase_date DESC LIMIT 1), 0) * sb.quantity))
             FROM sales_bulk sb WHERE sb.sale_date = '$today'
@@ -393,6 +443,10 @@ $today_profit_query = mysqli_query($conn, "
                 (SELECT cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu, stock s WHERE pu.product_id = sr.product_id AND s.product_id = sr.product_id ORDER BY pu.purchase_date DESC LIMIT 1), 0
             ) * sr.pieces_sold))
             FROM sales_retail sr WHERE sr.sale_date = '$today'
+        ), 0) +
+        COALESCE((
+            SELECT SUM(COALESCE(l.unit_price*l.qty, l.amount) - COALESCE((SELECT cost_price FROM purchases WHERE product_id = l.product_id ORDER BY purchase_date DESC LIMIT 1)*l.qty, 0))
+            FROM loans l WHERE l.loan_date = '$today'
         ), 0) as today_profit
 ");
 $today_data = mysqli_fetch_assoc($today_profit_query);
@@ -556,9 +610,12 @@ $today_margin = $today_sales > 0 ? ($today_profit / $today_sales) * 100 : 0;
                             <tr class="<?php echo ($sale['profit'] ?? 0) >= 0 ? 'highlight-profit' : 'highlight-loss'; ?>">
                                 <td><?php echo date('M d', strtotime($sale['sale_date'])); ?></td>
                                 <td>
-                                    <span class="badge badge-<?php echo $sale['sale_type'] == 'Bulk' ? 'primary' : 'info'; ?>">
+                                    <span class="badge badge-<?php echo str_starts_with($sale['sale_type'], 'Bulk') ? 'primary' : 'info'; ?>">
                                         <?php echo $sale['sale_type']; ?>
                                     </span>
+                                    <?php if(str_contains($sale['sale_type'], 'Loan')): ?>
+                                        <span class="loan-badge" style="background:#f59e0b;color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600;margin-left:3px;">LOAN</span>
+                                    <?php endif; ?>
                                 </td>
                                 <td><strong><?php echo htmlspecialchars($sale['product_name'] ?? ''); ?></strong></td>
                                 <td><?php echo $sale['quantity'] ?? 0; ?> <?php echo ($sale['sale_type'] ?? '') == 'Bulk' ? 'pkg' : 'pcs'; ?></td>
