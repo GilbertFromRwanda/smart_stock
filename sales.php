@@ -83,12 +83,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_loan'])) {
         $_SESSION['flash_error'] = "Insufficient retail stock available.";
         header("Location: sales.php"); exit;
     }
-    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date, sale_type, unit_price) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date','retail','$unit_price')");
+    mysqli_query($conn, "INSERT INTO sales_retail (product_id, pieces_sold, retail_price, total_amount, sale_date, customer_name, has_loan, amount)
+                         VALUES ($product_id, $qty, $unit_price, $full_total, '$loan_date', '$client', 1, $amount)");
+    $retail_id = mysqli_insert_id($conn);
+    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date, sale_type, unit_price, retail_id)
+                                VALUES ($product_id, $qty, $amount, '$client', '$phone', '$loan_date', 'retail', $unit_price, $retail_id)");
     if ($ins) {
         mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity - $qty WHERE product_id = $product_id");
+        mysqli_query($conn, "INSERT INTO loan_clients (name, phone, total_loans, unpaid_amount) VALUES ('$client', '$phone', 1, $amount) ON DUPLICATE KEY UPDATE total_loans = total_loans + 1, unpaid_amount = unpaid_amount + $amount");
         $_SESSION['flash_success'] = "Loan registered for $client — RWF " . number_format($amount, 0);
         $_SESSION['flash_sale_type'] = 'retail';
     } else {
+        mysqli_query($conn, "DELETE FROM sales_retail WHERE id = $retail_id");
         $_SESSION['flash_error'] = "Failed to register loan.";
     }
     header("Location: sales.php"); exit;
@@ -174,12 +180,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_loan'])) {
         $_SESSION['flash_error'] = "Insufficient stock available.";
         header("Location: sales.php"); exit;
     }
-    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date, sale_type, unit_price) VALUES ('$product_id','$qty','$amount','$client','$phone','$loan_date','bulk','$unit_price')");
+    mysqli_query($conn, "INSERT INTO sales_bulk (product_id, quantity, package_price, total_amount, sale_date, customer_name, has_loan, amount)
+                         VALUES ($product_id, $qty, $unit_price, $full_total, '$loan_date', '$client', 1, $amount)");
+    $bulk_id = mysqli_insert_id($conn);
+    $ins = mysqli_query($conn, "INSERT INTO loans (product_id, qty, amount, client, phone, loan_date, sale_type, unit_price, bulk_id)
+                                VALUES ($product_id, $qty, $amount, '$client', '$phone', '$loan_date', 'bulk', $unit_price, $bulk_id)");
     if ($ins) {
         mysqli_query($conn, "UPDATE stock SET quantity = quantity - $qty WHERE product_id = $product_id");
+        mysqli_query($conn, "INSERT INTO loan_clients (name, phone, total_loans, unpaid_amount) VALUES ('$client', '$phone', 1, $amount) ON DUPLICATE KEY UPDATE total_loans = total_loans + 1, unpaid_amount = unpaid_amount + $amount");
         $_SESSION['flash_success'] = "Loan registered for $client — RWF " . number_format($amount, 0);
         $_SESSION['flash_sale_type'] = 'bulk';
     } else {
+        mysqli_query($conn, "DELETE FROM sales_bulk WHERE id = $bulk_id");
         $_SESSION['flash_error'] = "Failed to register loan.";
     }
     header("Location: sales.php"); exit;
@@ -216,49 +228,76 @@ $retail_products = mysqli_query($conn, "
 // Date filter (default: today)
 $date_from = $_GET['date_from'] ?? date('Y-m-d');
 $date_to = $_GET['date_to'] ?? date('Y-m-d');
-$active_tab = in_array($_GET['tab'] ?? '', ['bulk', 'retail']) ? $_GET['tab'] : null;
+$active_tab   = in_array($_GET['tab'] ?? '', ['bulk', 'retail']) ? $_GET['tab'] : null;
+$highlight_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $date_from_safe = mysqli_real_escape_string($conn, $date_from);
 $date_to_safe = mysqli_real_escape_string($conn, $date_to);
 
-// Get sales filtered by date (including loans)
-$recent_bulk_sales = mysqli_query($conn, "
-    (SELECT sb.id, sb.product_id, sb.quantity, sb.package_price, sb.total_amount,
-            sb.sale_date, sb.customer_name, sb.created_at, p.name, 0 AS is_loan
-     FROM sales_bulk sb
-     JOIN products p ON sb.product_id = p.id
-     WHERE sb.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe')
-    UNION ALL
-    (SELECT l.id, l.product_id, l.qty AS quantity,
-            COALESCE(l.unit_price, l.amount / l.qty) AS package_price,
-            l.amount AS total_amount, l.loan_date AS sale_date,
-            l.client AS customer_name, l.created_at, p.name, 1 AS is_loan
-     FROM loans l
-     JOIN products p ON l.product_id = p.id
-     WHERE l.sale_type = 'bulk' AND l.loan_date BETWEEN '$date_from_safe' AND '$date_to_safe')
-    ORDER BY created_at DESC
-");
+// When navigating from loans with a specific sale ID, fetch only that record
+if ($highlight_id && $active_tab) {
+    if ($active_tab === 'bulk') {
+        $recent_bulk_sales = mysqli_query($conn, "
+            SELECT sb.id, sb.product_id, sb.quantity, sb.package_price, sb.total_amount,
+                   sb.sale_date, sb.customer_name, sb.created_at, p.name, sb.has_loan AS is_loan
+            FROM sales_bulk sb
+            JOIN products p ON sb.product_id = p.id
+            WHERE sb.id = $highlight_id
+        ");
+        $recent_retail_sales = mysqli_query($conn, "SELECT id, product_id, pieces_sold, retail_price, total_amount, sale_date, customer_name, created_at, NULL AS name, has_loan AS is_loan FROM sales_retail WHERE 0");
+    } else {
+        $recent_retail_sales = mysqli_query($conn, "
+            SELECT sr.id, sr.product_id, sr.pieces_sold, sr.retail_price, sr.total_amount,
+                   sr.sale_date, sr.customer_name, sr.created_at, p.name, sr.has_loan AS is_loan
+            FROM sales_retail sr
+            JOIN products p ON sr.product_id = p.id
+            WHERE sr.id = $highlight_id
+        ");
+        $recent_bulk_sales = mysqli_query($conn, "SELECT id, product_id, quantity, package_price, total_amount, sale_date, customer_name, created_at, NULL AS name, has_loan AS is_loan FROM sales_bulk WHERE 0");
+    }
+} else {
+    // Full date-range queries
+    $recent_bulk_sales = mysqli_query($conn, "
+        (SELECT sb.id, sb.product_id, sb.quantity, sb.package_price, sb.total_amount,
+                sb.sale_date, sb.customer_name, sb.created_at, p.name, sb.has_loan AS is_loan
+         FROM sales_bulk sb
+         JOIN products p ON sb.product_id = p.id
+         WHERE sb.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+        UNION ALL
+        (SELECT l.id, l.product_id, l.qty AS quantity,
+                COALESCE(l.unit_price, l.amount / l.qty) AS package_price,
+                l.amount AS total_amount, l.loan_date AS sale_date,
+                l.client AS customer_name, l.created_at, p.name, 1 AS is_loan
+         FROM loans l
+         JOIN products p ON l.product_id = p.id
+         WHERE l.sale_type = 'bulk' AND l.bulk_id IS NULL
+               AND l.loan_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+        ORDER BY created_at DESC
+    ");
 
-$recent_retail_sales = mysqli_query($conn, "
-    (SELECT sr.id, sr.product_id, sr.pieces_sold, sr.retail_price, sr.total_amount,
-            sr.sale_date, sr.customer_name, sr.created_at, p.name, 0 AS is_loan
-     FROM sales_retail sr
-     JOIN products p ON sr.product_id = p.id
-     WHERE sr.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe')
-    UNION ALL
-    (SELECT l.id, l.product_id, l.qty AS pieces_sold,
-            COALESCE(l.unit_price, l.amount / l.qty) AS retail_price,
-            l.amount AS total_amount, l.loan_date AS sale_date,
-            l.client AS customer_name, l.created_at, p.name, 1 AS is_loan
-     FROM loans l
-     JOIN products p ON l.product_id = p.id
-     WHERE l.sale_type = 'retail' AND l.loan_date BETWEEN '$date_from_safe' AND '$date_to_safe')
-    ORDER BY created_at DESC
-");
+    $recent_retail_sales = mysqli_query($conn, "
+        (SELECT sr.id, sr.product_id, sr.pieces_sold, sr.retail_price, sr.total_amount,
+                sr.sale_date, sr.customer_name, sr.created_at, p.name, sr.has_loan AS is_loan
+         FROM sales_retail sr
+         JOIN products p ON sr.product_id = p.id
+         WHERE sr.sale_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+        UNION ALL
+        (SELECT l.id, l.product_id, l.qty AS pieces_sold,
+                COALESCE(l.unit_price, l.amount / l.qty) AS retail_price,
+                l.amount AS total_amount, l.loan_date AS sale_date,
+                l.client AS customer_name, l.created_at, p.name, 1 AS is_loan
+         FROM loans l
+         JOIN products p ON l.product_id = p.id
+         WHERE l.sale_type = 'retail' AND l.retail_id IS NULL
+               AND l.loan_date BETWEEN '$date_from_safe' AND '$date_to_safe')
+        ORDER BY created_at DESC
+    ");
+}
 
-// Existing loan clients for picker
+// Existing loan clients for picker (from loan_clients registry)
 $loan_clients_query = mysqli_query($conn, "
-    SELECT client, phone, MAX(loan_date) AS last_visit, COUNT(*) AS visits
-    FROM loans GROUP BY client, phone ORDER BY last_visit DESC
+    SELECT name AS client, phone, updated_at AS last_visit, total_loans AS visits
+    FROM loan_clients
+    ORDER BY updated_at DESC, name ASC
 ");
 $loan_clients_arr = [];
 while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
@@ -335,6 +374,15 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
         .loan-row {
             background: #fffbeb !important;
         }
+        .highlighted-row {
+            outline: 2px solid var(--primary);
+            background: #eff6ff !important;
+            animation: fadeHighlight 3s forwards;
+        }
+        @keyframes fadeHighlight {
+            0%   { background: #bfdbfe; }
+            100% { background: #eff6ff; }
+        }
     </style>
 </head>
 <body>
@@ -359,6 +407,12 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
             
             <div class="recent-sales">
                 <h2>Recent Sales</h2>
+                <?php if ($highlight_id && $active_tab): ?>
+                <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px 16px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:12px;">
+                    <span>Showing <strong><?php echo $active_tab; ?> sale #<?php echo $highlight_id; ?></strong> from loan.</span>
+                    <a href="sales.php?tab=<?php echo $active_tab; ?>" style="color:var(--primary);font-weight:600;">← View all <?php echo $active_tab; ?> sales</a>
+                </div>
+                <?php endif; ?>
                 <form method="GET" class="date-filter-form" id="filter-form">
                     <div class="date-filter-group">
                         <label for="date_from">From</label>
@@ -402,7 +456,9 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     $price_diff = $row['package_price'] - $default_price;
                                     $diff_class = $price_diff > 0 ? 'text-success' : ($price_diff < 0 ? 'text-danger' : '');
                                 ?>
-                                <tr <?php echo $row['is_loan'] ? 'class="loan-row"' : ''; ?>>
+                                <?php $is_hl = ($highlight_id && $row['id'] == $highlight_id); ?>
+                                <tr id="sale-row-<?php echo $row['id']; ?>"
+                                    class="<?php echo $row['is_loan'] ? 'loan-row' : ''; ?> <?php echo $is_hl ? 'highlighted-row' : ''; ?>">
                                     <td><?php echo date('Y-m-d', strtotime($row['sale_date'])); ?></td>
                                     <td><?php echo htmlspecialchars($row['name']); ?></td>
                                     <td><?php echo $row['quantity']; ?></td>
@@ -473,7 +529,9 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                                     $price_diff = $row['retail_price'] - $default_price;
                                     $diff_class = $price_diff > 0 ? 'text-success' : ($price_diff < 0 ? 'text-danger' : '');
                                 ?>
-                                <tr <?php echo $row['is_loan'] ? 'class="loan-row"' : ''; ?>>
+                                <?php $is_hl = ($highlight_id && $row['id'] == $highlight_id); ?>
+                                <tr id="sale-row-<?php echo $row['id']; ?>"
+                                    class="<?php echo $row['is_loan'] ? 'loan-row' : ''; ?> <?php echo $is_hl ? 'highlighted-row' : ''; ?>">
                                     <td><?php echo date('Y-m-d', strtotime($row['sale_date'])); ?></td>
                                     <td><?php echo htmlspecialchars($row['name']); ?></td>
                                     <td><?php echo $row['pieces_sold']; ?></td>
@@ -1302,6 +1360,15 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) $loan_clients_arr[] = $c;
                     setTimeout(function() { a.style.display = 'none'; }, 300);
                 }, 5000);
             });
+
+            <?php if ($highlight_id): ?>
+            var target = document.getElementById('sale-row-<?php echo $highlight_id; ?>');
+            if (target) {
+                setTimeout(function() {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 150);
+            }
+            <?php endif; ?>
         });
     </script>
 </body>

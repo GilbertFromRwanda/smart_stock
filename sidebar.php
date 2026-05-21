@@ -35,8 +35,9 @@ $nav = [
         'label' => 'Admin',
         'roles' => ['admin', 'manager'],
         'items' => [
-            ['href' => 'users.php',    'icon' => '◎', 'label' => 'Users',    'roles_item' => ['admin','manager']],
-            ['href' => 'database.php', 'icon' => '⊗', 'label' => 'Database', 'roles_item' => ['admin']],
+            ['href' => 'users.php',      'icon' => '◎', 'label' => 'Users',      'roles_item' => ['admin','manager']],
+            ['href' => 'database.php',   'icon' => '⊗', 'label' => 'Database',   'roles_item' => ['admin']],
+            ['href' => 'run_update.php', 'icon' => '⚙', 'label' => 'Run Updates', 'roles_item' => ['admin']],
         ]
     ],
 ];

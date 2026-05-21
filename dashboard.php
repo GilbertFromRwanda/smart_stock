@@ -50,48 +50,44 @@ $low_stock_query = mysqli_query($conn, "
 // Today's sales
 $today_sales_query = mysqli_query($conn, "
     SELECT
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today'), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today'), 0) +
-        COALESCE((SELECT COALESCE(SUM(COALESCE(unit_price*qty,amount)),0) FROM loans WHERE loan_date = '$today'), 0) as total,
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today'), 0) +
-        COALESCE((SELECT COALESCE(SUM(COALESCE(unit_price*qty,amount)),0) FROM loans WHERE loan_date = '$today' AND sale_type='bulk'), 0) as bulk_total,
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today'), 0) +
-        COALESCE((SELECT COALESCE(SUM(COALESCE(unit_price*qty,amount)),0) FROM loans WHERE loan_date = '$today' AND sale_type='retail'), 0) as retail_total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today' AND has_loan = 0), 0) +
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today' AND has_loan = 0), 0) as total,
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today' AND has_loan = 0), 0) as bulk_total,
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today' AND has_loan = 0), 0) as retail_total
 ");
 $today_sales = mysqli_fetch_assoc($today_sales_query);
 
 // This week's sales
 $week_sales_query = mysqli_query($conn, "
     SELECT
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$week_start' AND '$week_end'), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$week_start' AND '$week_end'), 0) +
-        COALESCE((SELECT COALESCE(SUM(COALESCE(unit_price*qty,amount)),0) FROM loans WHERE loan_date BETWEEN '$week_start' AND '$week_end'), 0) as total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$week_start' AND '$week_end' AND has_loan = 0), 0) +
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$week_start' AND '$week_end' AND has_loan = 0), 0) as total
 ");
 $week_sales = mysqli_fetch_assoc($week_sales_query)['total'] ?? 0;
 
 // This month's sales
 $month_sales_query = mysqli_query($conn, "
     SELECT
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$month_start' AND '$month_end'), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$month_start' AND '$month_end'), 0) +
-        COALESCE((SELECT COALESCE(SUM(COALESCE(unit_price*qty,amount)),0) FROM loans WHERE loan_date BETWEEN '$month_start' AND '$month_end'), 0) as total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$month_start' AND '$month_end' AND has_loan = 0), 0) +
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$month_start' AND '$month_end' AND has_loan = 0), 0) as total
 ");
 $month_sales = mysqli_fetch_assoc($month_sales_query)['total'] ?? 0;
 
 // ============== PROFIT STATISTICS ==============
 // Today's profit (with cost calculation)
 $today_profit_query = mysqli_query($conn, "
-    SELECT 
+    SELECT
         -- Bulk sales profit
         COALESCE((
             SELECT SUM(sb.total_amount - (pu.cost_price * sb.quantity))
             FROM sales_bulk sb
             JOIN purchases pu ON pu.product_id = sb.product_id
             WHERE sb.sale_date = '$today'
+              AND sb.has_loan = 0
             AND pu.id = (
-                SELECT id FROM purchases p2 
-                WHERE p2.product_id = sb.product_id 
-                AND p2.purchase_date <= sb.sale_date 
+                SELECT id FROM purchases p2
+                WHERE p2.product_id = sb.product_id
+                AND p2.purchase_date <= sb.sale_date
                 ORDER BY p2.purchase_date DESC LIMIT 1
             )
         ), 0) +
@@ -102,17 +98,13 @@ $today_profit_query = mysqli_query($conn, "
             JOIN purchases pu ON pu.product_id = sr.product_id
             LEFT JOIN stock s ON sr.product_id = s.product_id
             WHERE sr.sale_date = '$today'
+              AND sr.has_loan = 0
             AND pu.id = (
                 SELECT id FROM purchases p2
                 WHERE p2.product_id = sr.product_id
                 AND p2.purchase_date <= sr.sale_date
                 ORDER BY p2.purchase_date DESC LIMIT 1
             )
-        ), 0) +
-        -- Loan profit
-        COALESCE((
-            SELECT SUM(COALESCE(l.unit_price*l.qty, l.amount) - COALESCE((SELECT cost_price FROM purchases WHERE product_id = l.product_id ORDER BY purchase_date DESC LIMIT 1)*l.qty, 0))
-            FROM loans l WHERE l.loan_date = '$today'
         ), 0) as total_profit
 ");
 $today_profit = mysqli_fetch_assoc($today_profit_query)['total_profit'] ?? 0;
@@ -126,12 +118,12 @@ $week_profit_query = mysqli_query($conn, "
 $week_profit = mysqli_fetch_assoc($week_profit_query)['total_profit'] ?? 0;
 
 // ============== TRENDING DATA ==============
-// Last 7 days sales for chart (including loans)
+// Last 7 days sales for chart
 $last_7_days = mysqli_query($conn, "
     SELECT
         dates.date,
-        COALESCE(SUM(sb.total_amount), 0) + COALESCE(SUM(lb.loan_amount), 0) as bulk_sales,
-        COALESCE(SUM(sr.total_amount), 0) + COALESCE(SUM(lr.loan_amount), 0) as retail_sales
+        COALESCE(SUM(CASE WHEN sb.has_loan = 0 THEN sb.total_amount ELSE 0 END), 0) as bulk_sales,
+        COALESCE(SUM(CASE WHEN sr.has_loan = 0 THEN sr.total_amount ELSE 0 END), 0) as retail_sales
     FROM (
         SELECT CURDATE() - INTERVAL (a.a + (10 * b.a) + (100 * c.a)) DAY as date
         FROM (SELECT 0 as a UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) as a
@@ -140,8 +132,6 @@ $last_7_days = mysqli_query($conn, "
     ) as dates
     LEFT JOIN sales_bulk sb ON sb.sale_date = dates.date
     LEFT JOIN sales_retail sr ON sr.sale_date = dates.date
-    LEFT JOIN (SELECT loan_date, SUM(COALESCE(unit_price*qty,amount)) as loan_amount FROM loans WHERE sale_type='bulk' GROUP BY loan_date) lb ON lb.loan_date = dates.date
-    LEFT JOIN (SELECT loan_date, SUM(COALESCE(unit_price*qty,amount)) as loan_amount FROM loans WHERE sale_type='retail' GROUP BY loan_date) lr ON lr.loan_date = dates.date
     WHERE dates.date BETWEEN CURDATE() - INTERVAL 6 DAY AND CURDATE()
     GROUP BY dates.date
     ORDER BY dates.date
@@ -293,9 +283,8 @@ if (($today_sales['total'] ?? 0) == 0) {
                         <?php 
                         $yesterday_query = mysqli_query($conn, "
                             SELECT
-                                COALESCE((SELECT SUM(total_amount) FROM sales_bulk WHERE sale_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY)), 0) +
-                                COALESCE((SELECT SUM(total_amount) FROM sales_retail WHERE sale_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY)), 0) +
-                                COALESCE((SELECT SUM(COALESCE(unit_price*qty,amount)) FROM loans WHERE loan_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY)), 0) as total
+                                COALESCE((SELECT SUM(total_amount) FROM sales_bulk WHERE sale_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND has_loan = 0), 0) +
+                                COALESCE((SELECT SUM(total_amount) FROM sales_retail WHERE sale_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND has_loan = 0), 0) as total
                         ");
                         $yesterday_total = mysqli_fetch_assoc($yesterday_query)['total'] ?? 0;
                         
@@ -523,9 +512,8 @@ if (($today_sales['total'] ?? 0) == 0) {
                                 $avg_daily = mysqli_fetch_assoc(mysqli_query($conn, "
                                     SELECT AVG(daily_total) as avg_sales FROM (
                                         SELECT sale_date, SUM(total_amount) as daily_total FROM (
-                                            SELECT sale_date, total_amount FROM sales_bulk
-                                            UNION ALL SELECT sale_date, total_amount FROM sales_retail
-                                            UNION ALL SELECT loan_date, COALESCE(unit_price*qty,amount) FROM loans
+                                            SELECT sale_date, total_amount FROM sales_bulk WHERE has_loan = 0
+                                            UNION ALL SELECT sale_date, total_amount FROM sales_retail WHERE has_loan = 0
                                         ) as s GROUP BY sale_date ORDER BY sale_date DESC LIMIT 30
                                     ) as t"));
                                 echo number_format($avg_daily['avg_sales'] ?? 0, 0); ?></div>
@@ -557,10 +545,10 @@ if (($today_sales['total'] ?? 0) == 0) {
                 <div class="perf-box">
                     <h4>Quick Insights</h4>
                     <?php
-                    $total_bulk_all   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0)+COALESCE((SELECT SUM(COALESCE(unit_price*qty,amount)) FROM loans WHERE sale_type='bulk'),0) as t FROM sales_bulk"))['t'] ?? 0;
-                    $total_retail_all = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0)+COALESCE((SELECT SUM(COALESCE(unit_price*qty,amount)) FROM loans WHERE sale_type='retail'),0) as t FROM sales_retail"))['t'] ?? 0;
+                    $total_bulk_all   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0) as t FROM sales_bulk WHERE has_loan = 0"))['t'] ?? 0;
+                    $total_retail_all = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0) as t FROM sales_retail WHERE has_loan = 0"))['t'] ?? 0;
                     $total_all = $total_bulk_all + $total_retail_all;
-                    $avg_trans = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(amount) as a FROM (SELECT total_amount as amount FROM sales_bulk UNION ALL SELECT total_amount FROM sales_retail UNION ALL SELECT COALESCE(unit_price*qty,amount) FROM loans) as s"));
+                    $avg_trans = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(amount) as a FROM (SELECT total_amount as amount FROM sales_bulk WHERE has_loan = 0 UNION ALL SELECT total_amount FROM sales_retail WHERE has_loan = 0) as s"));
                     $peak_hour = mysqli_fetch_assoc(mysqli_query($conn, "SELECT HOUR(created_at) as h, COUNT(*) as c FROM (SELECT created_at FROM sales_bulk UNION ALL SELECT created_at FROM sales_retail) as s GROUP BY h ORDER BY c DESC LIMIT 1"));
                     $avg_items = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(items) as a FROM (SELECT quantity as items FROM sales_bulk UNION ALL SELECT pieces_sold FROM sales_retail) as s"));
                     ?>

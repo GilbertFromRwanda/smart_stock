@@ -21,17 +21,13 @@ function updateWeeklyRevenue($conn) {
     $week_start = date('Y-m-d', strtotime('monday this week'));
     $week_end = date('Y-m-d', strtotime('sunday this week'));
     
-    // Calculate bulk sales with cost analysis (including loans)
+    // Calculate bulk sales with cost analysis (exclude loans — not yet collected)
     $bulk_query = mysqli_query($conn, "
-        SELECT t.product_id, t.quantity, t.total_amount,
-            (SELECT cost_price FROM purchases WHERE product_id = t.product_id ORDER BY purchase_date DESC LIMIT 1) as last_cost_price
-        FROM (
-            SELECT sb.product_id, sb.quantity, sb.total_amount
-            FROM sales_bulk sb WHERE sb.sale_date BETWEEN '$week_start' AND '$week_end'
-            UNION ALL
-            SELECT l.product_id, l.qty AS quantity, COALESCE(l.unit_price * l.qty, l.amount) AS total_amount
-            FROM loans l WHERE l.sale_type = 'bulk' AND l.loan_date BETWEEN '$week_start' AND '$week_end'
-        ) t
+        SELECT sb.product_id, sb.quantity, sb.total_amount,
+            (SELECT cost_price FROM purchases WHERE product_id = sb.product_id ORDER BY purchase_date DESC LIMIT 1) AS last_cost_price
+        FROM sales_bulk sb
+        WHERE sb.sale_date BETWEEN '$week_start' AND '$week_end'
+          AND sb.has_loan = 0
     ");
     
     $bulk_total = 0;
@@ -45,19 +41,15 @@ function updateWeeklyRevenue($conn) {
         $bulk_profit += ($sale['total_amount'] - $cost);
     }
     
-    // Calculate retail sales with cost analysis (including loans)
+    // Calculate retail sales with cost analysis (exclude loans — not yet collected)
     $retail_query = mysqli_query($conn, "
-        SELECT t.product_id, t.pieces_sold, t.total_amount,
-            (SELECT cost_price FROM purchases WHERE product_id = t.product_id ORDER BY purchase_date DESC LIMIT 1) as last_cost_price,
-            COALESCE(s.pieces_per_package, 1) as pieces_per_package
-        FROM (
-            SELECT sr.product_id, sr.pieces_sold, sr.total_amount
-            FROM sales_retail sr WHERE sr.sale_date BETWEEN '$week_start' AND '$week_end'
-            UNION ALL
-            SELECT l.product_id, l.qty AS pieces_sold, COALESCE(l.unit_price * l.qty, l.amount) AS total_amount
-            FROM loans l WHERE l.sale_type = 'retail' AND l.loan_date BETWEEN '$week_start' AND '$week_end'
-        ) t
-        LEFT JOIN stock s ON t.product_id = s.product_id
+        SELECT sr.product_id, sr.pieces_sold, sr.total_amount,
+            (SELECT cost_price FROM purchases WHERE product_id = sr.product_id ORDER BY purchase_date DESC LIMIT 1) AS last_cost_price,
+            COALESCE(s.pieces_per_package, 1) AS pieces_per_package
+        FROM sales_retail sr
+        LEFT JOIN stock s ON s.product_id = sr.product_id
+        WHERE sr.sale_date BETWEEN '$week_start' AND '$week_end'
+          AND sr.has_loan = 0
     ");
     
     $retail_total = 0;
