@@ -9,29 +9,39 @@ if (!isLoggedIn()) {
 $from = isset($_GET['from']) && $_GET['from'] ? mysqli_real_escape_string($conn, $_GET['from']) : date('Y-m-01');
 $to   = isset($_GET['to'])   && $_GET['to']   ? mysqli_real_escape_string($conn, $_GET['to'])   : date('Y-m-d');
 
-// ── Bulk sales total (exclude loans — not yet collected) ───────────────────────
+// ── Bulk sales total ───────────────────────────────────────────────────────────
 $bulk = mysqli_fetch_assoc(mysqli_query($conn, "
     SELECT
         COALESCE(SUM(sb.total_amount), 0) AS revenue,
         COALESCE(SUM(
-            COALESCE((SELECT pu.cost_price FROM purchases pu WHERE pu.product_id = sb.product_id AND pu.purchase_date <= sb.sale_date ORDER BY pu.purchase_date DESC LIMIT 1), 0)
-            * sb.quantity
+            (SELECT pu.cost_price FROM purchases pu
+             WHERE pu.product_id = sb.product_id
+               AND pu.purchase_date <= sb.sale_date
+             ORDER BY pu.purchase_date DESC LIMIT 1)
+            * sb.quantity / COALESCE(NULLIF(sb.level_divisor, 0), 1)
         ), 0) AS cost
     FROM sales_bulk sb
     WHERE sb.sale_date BETWEEN '$from' AND '$to'
+      AND sb.refunded = 0
       AND sb.has_loan = 0
 "));
 
-// ── Retail sales total (exclude loans — not yet collected) ─────────────────────
+// ── Retail sales total ─────────────────────────────────────────────────────────
 $retail = mysqli_fetch_assoc(mysqli_query($conn, "
     SELECT
         COALESCE(SUM(sr.total_amount), 0) AS revenue,
         COALESCE(SUM(
-            COALESCE((SELECT pu.cost_price / NULLIF(s.pieces_per_package, 0) FROM purchases pu JOIN stock s ON s.product_id = pu.product_id WHERE pu.product_id = sr.product_id AND pu.purchase_date <= sr.sale_date ORDER BY pu.purchase_date DESC LIMIT 1), 0)
+            (SELECT pu.cost_price / NULLIF(s.pieces_per_package, 0)
+             FROM purchases pu
+             JOIN stock s ON s.product_id = pu.product_id
+             WHERE pu.product_id = sr.product_id
+               AND pu.purchase_date <= sr.sale_date
+             ORDER BY pu.purchase_date DESC LIMIT 1)
             * sr.pieces_sold
         ), 0) AS cost
     FROM sales_retail sr
     WHERE sr.sale_date BETWEEN '$from' AND '$to'
+      AND sr.refunded = 0
       AND sr.has_loan = 0
 "));
 
@@ -75,7 +85,7 @@ $daily_bulk = [];
 $bulk_daily_q = mysqli_query($conn, "
     SELECT sale_date, SUM(total_amount) AS total
     FROM sales_bulk
-    WHERE sale_date BETWEEN '$from' AND '$to' AND has_loan = 0
+    WHERE sale_date BETWEEN '$from' AND '$to' AND refunded = 0 AND has_loan = 0
     GROUP BY sale_date
 ");
 while ($r = mysqli_fetch_assoc($bulk_daily_q)) $daily_bulk[$r['sale_date']] = $r['total'];
@@ -84,7 +94,7 @@ $daily_retail = [];
 $retail_daily_q = mysqli_query($conn, "
     SELECT sale_date, SUM(total_amount) AS total
     FROM sales_retail
-    WHERE sale_date BETWEEN '$from' AND '$to' AND has_loan = 0
+    WHERE sale_date BETWEEN '$from' AND '$to' AND refunded = 0 AND has_loan = 0
     GROUP BY sale_date
 ");
 while ($r = mysqli_fetch_assoc($retail_daily_q)) $daily_retail[$r['sale_date']] = $r['total'];

@@ -5,6 +5,16 @@ if (!isLoggedIn()) {
     redirect('login.php');
 }
 
+function abbr_money(float $n): string {
+    $n   = (float)$n;
+    $abs = abs($n);
+    $sign = $n < 0 ? '-' : '';
+    if ($abs >= 1_000_000) $abbr = $sign . rtrim(rtrim(number_format($abs / 1_000_000, 1), '0'), '.') . 'M';
+    elseif ($abs >= 1_000) $abbr = $sign . rtrim(rtrim(number_format($abs / 1_000, 1), '0'), '.') . 'K';
+    else                   $abbr = $sign . number_format($abs, 0);
+    return $abbr;
+}
+
 // Get current date information
 $today = date('Y-m-d');
 $week_start = date('Y-m-d', strtotime('monday this week'));
@@ -32,9 +42,40 @@ $total_retail_value = mysqli_fetch_assoc($retail_value_query)['total_value'] ?? 
 
 // Total retail pieces
 $total_retail_pieces = mysqli_fetch_assoc(mysqli_query($conn, "
-    SELECT SUM(pieces_quantity) as total 
+    SELECT SUM(pieces_quantity) as total
     FROM retail_stock
 "))['total'] ?? 0;
+
+// Stock value at selling price (bulk warehouse + retail shop)
+$selling_stock_value = ($total_stock_value ?? 0) + ($total_retail_value ?? 0);
+
+// Stock value at purchase cost (weighted average cost × qty on hand)
+$purchase_stock_value = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT COALESCE(SUM(s.quantity * avg_cost.wac), 0) AS purchase_value
+    FROM stock s
+    JOIN (
+        SELECT product_id,
+               SUM(quantity * cost_price) / NULLIF(SUM(quantity), 0) AS wac
+        FROM purchases
+        WHERE cost_price IS NOT NULL
+        GROUP BY product_id
+    ) avg_cost ON avg_cost.product_id = s.product_id
+"))['purchase_value'] ?? 0;
+
+$purchase_retail_value = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT COALESCE(SUM(rs.pieces_quantity * (avg_cost.wac / NULLIF(st.pieces_per_package, 1))), 0) AS purchase_value
+    FROM retail_stock rs
+    JOIN (
+        SELECT product_id,
+               SUM(quantity * cost_price) / NULLIF(SUM(quantity), 0) AS wac
+        FROM purchases
+        WHERE cost_price IS NOT NULL
+        GROUP BY product_id
+    ) avg_cost ON avg_cost.product_id = rs.product_id
+    LEFT JOIN stock st ON st.product_id = rs.product_id
+"))['purchase_value'] ?? 0;
+
+$total_purchase_stock_value = $purchase_stock_value + $purchase_retail_value;
 
 // Low stock products (below reorder level)
 $low_stock_query = mysqli_query($conn, "
@@ -46,30 +87,55 @@ $low_stock_query = mysqli_query($conn, "
     LIMIT 5
 ");
 
+// Payment method breakdown (today)
+$today_payment = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT
+        COALESCE(SUM(cash_amount), 0) as cash_total,
+        COALESCE(SUM(momo_amount), 0) as momo_total,
+        COALESCE(SUM(loan_amount), 0) as loan_total
+    FROM (
+        SELECT cash_amount, momo_amount, loan_amount FROM sales_bulk   WHERE sale_date = '$today'
+        UNION ALL
+        SELECT cash_amount, momo_amount, loan_amount FROM sales_retail WHERE sale_date = '$today'
+    ) as combined
+"));
+$today_cash      = $today_payment['cash_total']  ?? 0;
+$today_momo      = $today_payment['momo_total']  ?? 0;
+$today_loan      = $today_payment['loan_total']  ?? 0;
+$today_pay_total = $today_cash + $today_momo + $today_loan;
+
+// Total outstanding loans
+$outstanding_loans = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT COALESCE(SUM(amount), 0) as total FROM loans
+"))['total'] ?? 0;
+
+// Users for collection filter (admin only)
+$users_for_filter = mysqli_query($conn, "SELECT id, full_name FROM users ORDER BY full_name ASC");
+
 // ============== SALES STATISTICS ==============
 // Today's sales
 $today_sales_query = mysqli_query($conn, "
     SELECT
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today' AND has_loan = 0), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today' AND has_loan = 0), 0) as total,
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date = '$today' AND has_loan = 0), 0) as bulk_total,
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today' AND has_loan = 0), 0) as retail_total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk   WHERE sale_date = '$today' AND refunded = 0 AND has_loan = 0), 0) +
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today' AND refunded = 0 AND has_loan = 0), 0) as total,
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk   WHERE sale_date = '$today' AND refunded = 0 AND has_loan = 0), 0) as bulk_total,
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date = '$today' AND refunded = 0 AND has_loan = 0), 0) as retail_total
 ");
 $today_sales = mysqli_fetch_assoc($today_sales_query);
 
 // This week's sales
 $week_sales_query = mysqli_query($conn, "
     SELECT
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$week_start' AND '$week_end' AND has_loan = 0), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$week_start' AND '$week_end' AND has_loan = 0), 0) as total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk   WHERE sale_date BETWEEN '$week_start' AND '$week_end' AND refunded = 0 AND has_loan = 0), 0) +
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$week_start' AND '$week_end' AND refunded = 0 AND has_loan = 0), 0) as total
 ");
 $week_sales = mysqli_fetch_assoc($week_sales_query)['total'] ?? 0;
 
 // This month's sales
 $month_sales_query = mysqli_query($conn, "
     SELECT
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk WHERE sale_date BETWEEN '$month_start' AND '$month_end' AND has_loan = 0), 0) +
-        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$month_start' AND '$month_end' AND has_loan = 0), 0) as total
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_bulk   WHERE sale_date BETWEEN '$month_start' AND '$month_end' AND refunded = 0 AND has_loan = 0), 0) +
+        COALESCE((SELECT COALESCE(SUM(total_amount),0) FROM sales_retail WHERE sale_date BETWEEN '$month_start' AND '$month_end' AND refunded = 0 AND has_loan = 0), 0) as total
 ");
 $month_sales = mysqli_fetch_assoc($month_sales_query)['total'] ?? 0;
 
@@ -77,12 +143,13 @@ $month_sales = mysqli_fetch_assoc($month_sales_query)['total'] ?? 0;
 // Today's profit (with cost calculation)
 $today_profit_query = mysqli_query($conn, "
     SELECT
-        -- Bulk sales profit
+        -- Bulk sales profit (cost divided by level_divisor for sub-level sales)
         COALESCE((
-            SELECT SUM(sb.total_amount - (pu.cost_price * sb.quantity))
+            SELECT SUM(sb.total_amount - (pu.cost_price * sb.quantity / COALESCE(NULLIF(sb.level_divisor, 0), 1)))
             FROM sales_bulk sb
             JOIN purchases pu ON pu.product_id = sb.product_id
             WHERE sb.sale_date = '$today'
+              AND sb.refunded = 0
               AND sb.has_loan = 0
             AND pu.id = (
                 SELECT id FROM purchases p2
@@ -98,6 +165,7 @@ $today_profit_query = mysqli_query($conn, "
             JOIN purchases pu ON pu.product_id = sr.product_id
             LEFT JOIN stock s ON sr.product_id = s.product_id
             WHERE sr.sale_date = '$today'
+              AND sr.refunded = 0
               AND sr.has_loan = 0
             AND pu.id = (
                 SELECT id FROM purchases p2
@@ -122,8 +190,8 @@ $week_profit = mysqli_fetch_assoc($week_profit_query)['total_profit'] ?? 0;
 $last_7_days = mysqli_query($conn, "
     SELECT
         dates.date,
-        COALESCE(SUM(CASE WHEN sb.has_loan = 0 THEN sb.total_amount ELSE 0 END), 0) as bulk_sales,
-        COALESCE(SUM(CASE WHEN sr.has_loan = 0 THEN sr.total_amount ELSE 0 END), 0) as retail_sales
+        COALESCE(SUM(CASE WHEN sb.has_loan = 0 AND sb.refunded = 0 THEN sb.total_amount ELSE 0 END), 0) as bulk_sales,
+        COALESCE(SUM(CASE WHEN sr.has_loan = 0 AND sr.refunded = 0 THEN sr.total_amount ELSE 0 END), 0) as retail_sales
     FROM (
         SELECT CURDATE() - INTERVAL (a.a + (10 * b.a) + (100 * c.a)) DAY as date
         FROM (SELECT 0 as a UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) as a
@@ -257,24 +325,38 @@ if (($today_sales['total'] ?? 0) == 0) {
                 </div>
                 
                 <div class="stat-card">
-                    <div class="stat-icon">💰</div>
-                    <div class="stat-label">Stock Value</div>
-                    <div class="stat-number">RWF <?php echo number_format($total_stock_value, 0); ?></div>
+                    <div class="stat-icon">🏷️</div>
+                    <div class="stat-label">Stock Value (Selling)</div>
+                    <div class="stat-number">RWF <?php echo number_format($selling_stock_value, 0); ?></div>
                     <div class="stat-trend">
                         <span class="stock-status">
-                            <span class="stock-dot <?php 
-                                if ($total_stock_value > 1000000) echo 'green';
-                                elseif ($total_stock_value > 500000) echo 'yellow';
-                                else echo 'red';
-                            ?>"></span>
-                            Warehouse value
+                            <span class="stock-dot green"></span>
+                            At selling price
                         </span>
                     </div>
                     <div class="stat-footer">
-                        Retail: RWF <?php echo number_format($total_retail_value, 0); ?>
+                        Warehouse: RWF <?php echo number_format($total_stock_value, 0); ?> &nbsp;|&nbsp; Retail: RWF <?php echo number_format($total_retail_value, 0); ?>
                     </div>
                 </div>
-                
+
+                <div class="stat-card">
+                    <div class="stat-icon">🧾</div>
+                    <div class="stat-label">Stock Value (Purchase)</div>
+                    <div class="stat-number">RWF <?php echo number_format($total_purchase_stock_value, 0); ?></div>
+                    <div class="stat-trend">
+                        <span class="stock-status">
+                            <span class="stock-dot <?php
+                                $margin = $selling_stock_value > 0 ? ($selling_stock_value - $total_purchase_stock_value) / $selling_stock_value * 100 : 0;
+                                echo $margin >= 15 ? 'green' : ($margin >= 5 ? 'yellow' : 'red');
+                            ?>"></span>
+                            At cost price &nbsp;·&nbsp; Margin <?php echo number_format($margin, 1); ?>%
+                        </span>
+                    </div>
+                    <div class="stat-footer">
+                        Potential profit: RWF <?php echo number_format($selling_stock_value - $total_purchase_stock_value, 0); ?>
+                    </div>
+                </div>
+
                 <div class="stat-card">
                     <div class="stat-icon">🛒</div>
                     <div class="stat-label">Today's Sales</div>
@@ -407,6 +489,201 @@ if (($today_sales['total'] ?? 0) == 0) {
             </script>
             <?php endif; ?>
             
+            <!-- Payment Collection Breakdown -->
+            <?php
+                $init_cash_pct = $today_pay_total > 0 ? round($today_cash / $today_pay_total * 100) : 0;
+                $init_momo_pct = $today_pay_total > 0 ? round($today_momo / $today_pay_total * 100) : 0;
+                $init_loan_pct = $today_pay_total > 0 ? 100 - $init_cash_pct - $init_momo_pct : 0;
+            ?>
+            <div style="margin-bottom:24px;">
+                <div class="chart-container" style="padding:20px 24px;">
+
+                    <!-- Header -->
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
+                        <div>
+                            <h3 style="margin:0 0 2px;">Collection Breakdown</h3>
+                            <p id="coll-subtitle" style="font-size:12px;color:var(--secondary);margin:0;">Today</p>
+                        </div>
+                        <form id="coll-form" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <input type="date" id="coll-from" value="<?php echo $today; ?>"
+                                style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:13px;">
+                            <span style="font-size:12px;color:var(--secondary);">to</span>
+                            <input type="date" id="coll-to" value="<?php echo $today; ?>"
+                                style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:13px;">
+                            <?php if ($_SESSION['role'] === 'admin'): ?>
+                            <select id="coll-user" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:13px;background:var(--white);">
+                                <option value="0">— All users —</option>
+                                <?php while ($u = mysqli_fetch_assoc($users_for_filter)): ?>
+                                <option value="<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
+                                <?php endwhile; ?>
+                            </select>
+                            <?php else: ?>
+                            <input type="hidden" id="coll-user" value="<?php echo (int)$_SESSION['user_id']; ?>">
+                            <?php endif; ?>
+                            <button type="button" onclick="fetchCollection()" style="padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer;">Filter</button>
+                            <button type="button" id="coll-today-btn" onclick="fetchCollection('<?php echo $today; ?>','<?php echo $today; ?>',0)"
+                                style="display:none;padding:6px 10px;background:var(--gray-200);color:var(--dark);border:none;border-radius:var(--radius);font-size:13px;cursor:pointer;">Today</button>
+                            <span id="coll-loader" style="display:none;font-size:12px;color:var(--secondary);">Loading…</span>
+                        </form>
+                    </div>
+
+                    <!-- Has-data state -->
+                    <div id="coll-data" style="display:<?php echo $today_pay_total > 0 ? 'block' : 'none'; ?>">
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;">
+
+                            <!-- Cash -->
+                            <div style="background:#f0fdf4;border-radius:12px;padding:16px;border-left:4px solid #22c55e;">
+                                <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">
+                                    <span style="font-size:18px;">💵</span>
+                                    <span style="font-size:12px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;">Cash</span>
+                                </div>
+                                <div id="coll-cash-amount" style="font-size:18px;font-weight:800;color:#111;margin-bottom:10px;">
+                                    RWF <?php echo abbr_money($today_cash); ?>
+                                </div>
+                                <div style="background:#dcfce7;border-radius:99px;height:6px;margin-bottom:5px;">
+                                    <div id="coll-cash-bar" style="background:#22c55e;height:6px;border-radius:99px;width:<?php echo $init_cash_pct; ?>%;transition:width .4s;"></div>
+                                </div>
+                                <div id="coll-cash-pct" style="font-size:11px;color:#15803d;font-weight:600;"><?php echo $init_cash_pct; ?>% of total</div>
+                            </div>
+
+                            <!-- Momo -->
+                            <div style="background:#eff6ff;border-radius:12px;padding:16px;border-left:4px solid #3b82f6;">
+                                <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">
+                                    <span style="font-size:18px;">📱</span>
+                                    <span style="font-size:12px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.5px;">Momo</span>
+                                </div>
+                                <div id="coll-momo-amount" style="font-size:18px;font-weight:800;color:#111;margin-bottom:10px;">
+                                    RWF <?php echo abbr_money($today_momo); ?>
+                                </div>
+                                <div style="background:#dbeafe;border-radius:99px;height:6px;margin-bottom:5px;">
+                                    <div id="coll-momo-bar" style="background:#3b82f6;height:6px;border-radius:99px;width:<?php echo $init_momo_pct; ?>%;transition:width .4s;"></div>
+                                </div>
+                                <div id="coll-momo-pct" style="font-size:11px;color:#1d4ed8;font-weight:600;"><?php echo $init_momo_pct; ?>% of total</div>
+                            </div>
+
+                            <!-- Loan -->
+                            <div style="background:#fffbeb;border-radius:12px;padding:16px;border-left:4px solid #f59e0b;">
+                                <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">
+                                    <span style="font-size:18px;">🔖</span>
+                                    <span style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:.5px;">Loan</span>
+                                </div>
+                                <div id="coll-loan-amount" style="font-size:18px;font-weight:800;color:#111;margin-bottom:10px;">
+                                    RWF <?php echo abbr_money($today_loan); ?>
+                                </div>
+                                <div style="background:#fef3c7;border-radius:99px;height:6px;margin-bottom:5px;">
+                                    <div id="coll-loan-bar" style="background:#f59e0b;height:6px;border-radius:99px;width:<?php echo $init_loan_pct; ?>%;transition:width .4s;"></div>
+                                </div>
+                                <div id="coll-loan-pct" style="font-size:11px;color:#b45309;font-weight:600;"><?php echo $init_loan_pct; ?>% deferred</div>
+                            </div>
+                        </div>
+
+                        <!-- Outstanding loans row -->
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#fafafa;border-radius:10px;border:1px solid #f3f4f6;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span style="font-size:16px;">⚠️</span>
+                                <div>
+                                    <div style="font-size:13px;font-weight:600;color:#374151;">Total Outstanding Loans</div>
+                                    <div style="font-size:11px;color:var(--secondary);">All unpaid client balances</div>
+                                </div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div id="coll-outstanding-amount" style="font-size:18px;font-weight:800;color:#f59e0b;">RWF <?php echo abbr_money($outstanding_loans); ?></div>
+                                <a href="loans.php" style="font-size:11px;color:var(--primary);text-decoration:none;">View details →</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div id="coll-empty" style="text-align:center;padding:32px 0;color:var(--secondary);display:<?php echo $today_pay_total > 0 ? 'none' : 'block'; ?>">
+                        <div style="font-size:32px;margin-bottom:8px;">💳</div>
+                        <div style="font-size:13px;">No sales recorded for this period</div>
+                        <div id="coll-empty-loans" style="display:<?php echo $outstanding_loans > 0 ? 'inline-flex' : 'none'; ?>;margin-top:16px;padding:12px 16px;background:#fffbeb;border-radius:10px;border:1px solid #fde68a;gap:12px;align-items:center;">
+                            <span style="font-size:13px;color:#92400e;">⚠️ Outstanding Loans:</span>
+                            <strong id="coll-empty-outstanding" style="color:#f59e0b;">RWF <?php echo abbr_money($outstanding_loans); ?></strong>
+                            <a href="loans.php" style="font-size:11px;color:var(--primary);">View →</a>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <script>
+            (function () {
+                var collToday = '<?php echo $today; ?>';
+
+                function fmt(n) {
+                    n = Math.round(n);
+                    var abs = Math.abs(n), sign = n < 0 ? '-' : '';
+                    if (abs >= 1000000) return sign + parseFloat((abs/1000000).toFixed(1)) + 'M';
+                    if (abs >= 1000)    return sign + parseFloat((abs/1000).toFixed(1)) + 'K';
+                    return sign + abs.toLocaleString();
+                }
+
+                function dateLabel(from, to) {
+                    if (from === to) {
+                        if (from === collToday) return 'Today';
+                        return new Date(from + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+                    }
+                    var f = new Date(from + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
+                    var t = new Date(to   + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+                    return f + ' – ' + t;
+                }
+
+                function render(d) {
+                    var total  = d.cash + d.momo + d.loan;
+                    var isToday = d.from === collToday && d.to === collToday;
+
+                    document.getElementById('coll-subtitle').textContent = dateLabel(d.from, d.to);
+                    document.getElementById('coll-today-btn').style.display = isToday ? 'none' : '';
+                    document.getElementById('coll-outstanding-amount').textContent = 'RWF ' + fmt(d.outstanding);
+                    document.getElementById('coll-empty-outstanding').textContent  = 'RWF ' + fmt(d.outstanding);
+                    document.getElementById('coll-empty-loans').style.display = d.outstanding > 0 ? 'inline-flex' : 'none';
+
+                    if (total > 0) {
+                        var cPct = Math.round(d.cash / total * 100);
+                        var mPct = Math.round(d.momo / total * 100);
+                        var lPct = 100 - cPct - mPct;
+
+                        document.getElementById('coll-cash-amount').textContent = 'RWF ' + fmt(d.cash);
+                        document.getElementById('coll-cash-bar').style.width    = cPct + '%';
+                        document.getElementById('coll-cash-pct').textContent    = cPct + '% of total';
+
+                        document.getElementById('coll-momo-amount').textContent = 'RWF ' + fmt(d.momo);
+                        document.getElementById('coll-momo-bar').style.width    = mPct + '%';
+                        document.getElementById('coll-momo-pct').textContent    = mPct + '% of total';
+
+                        document.getElementById('coll-loan-amount').textContent = 'RWF ' + fmt(d.loan);
+                        document.getElementById('coll-loan-bar').style.width    = lPct + '%';
+                        document.getElementById('coll-loan-pct').textContent    = lPct + '% deferred';
+
+                        document.getElementById('coll-data').style.display  = 'block';
+                        document.getElementById('coll-empty').style.display = 'none';
+                    } else {
+                        document.getElementById('coll-data').style.display  = 'none';
+                        document.getElementById('coll-empty').style.display = 'block';
+                    }
+                }
+
+                window.fetchCollection = function (from, to, userId) {
+                    from   = from   !== undefined ? from   : document.getElementById('coll-from').value;
+                    to     = to     !== undefined ? to     : document.getElementById('coll-to').value;
+                    userId = userId !== undefined ? userId : document.getElementById('coll-user').value;
+                    document.getElementById('coll-from').value = from;
+                    document.getElementById('coll-to').value   = to;
+                    document.getElementById('coll-user').value = userId;
+                    document.getElementById('coll-loader').style.display = 'inline';
+
+                    fetch('ajax_collection.php?coll_from=' + from + '&coll_to=' + to + '&user_id=' + userId)
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) { render(d); })
+                        .catch(function () {})
+                        .finally(function () {
+                            document.getElementById('coll-loader').style.display = 'none';
+                        });
+                };
+            })();
+            </script>
+
             <!-- Main Dashboard Row -->
             <div class="dashboard-row">
                 <!-- Sales Chart -->

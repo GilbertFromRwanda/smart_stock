@@ -50,6 +50,93 @@ CREATE TABLE IF NOT EXISTS `loan_clients` (
   UNIQUE KEY `name_phone` (`name`, `phone`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- ── purchase_levels: multi-level packaging chain ─────────────────────────────
+CREATE TABLE IF NOT EXISTS `purchase_levels` (
+  `id`             int(11)       NOT NULL AUTO_INCREMENT,
+  `purchase_id`    int(11)       NOT NULL,
+  `level_order`    tinyint(4)    NOT NULL,
+  `level_name`     varchar(100)  NOT NULL,
+  `qty_per_parent` int(11)       NOT NULL DEFAULT 1,
+  `selling_price`  decimal(10,2) NOT NULL DEFAULT 0.00,
+  PRIMARY KEY (`id`),
+  KEY `idx_purchase_id` (`purchase_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ── sales_bulk: split payments + level + seller + refund ─────────────────────
+ALTER TABLE `sales_bulk` ADD COLUMN IF NOT EXISTS `cash_amount`    decimal(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE `sales_bulk` ADD COLUMN IF NOT EXISTS `momo_amount`    decimal(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE `sales_bulk` ADD COLUMN IF NOT EXISTS `loan_amount`    decimal(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE `sales_bulk` ADD COLUMN IF NOT EXISTS `level_divisor`  int(11)       NOT NULL DEFAULT 1;
+ALTER TABLE `sales_bulk` ADD COLUMN IF NOT EXISTS `sold_by`        int(11)       DEFAULT NULL;
+ALTER TABLE `sales_bulk` ADD COLUMN IF NOT EXISTS `refunded`       tinyint(1)    NOT NULL DEFAULT 0;
+
+-- ── sales_retail: split payments + seller + refund ───────────────────────────
+ALTER TABLE `sales_retail` ADD COLUMN IF NOT EXISTS `cash_amount`  decimal(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE `sales_retail` ADD COLUMN IF NOT EXISTS `momo_amount`  decimal(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE `sales_retail` ADD COLUMN IF NOT EXISTS `loan_amount`  decimal(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE `sales_retail` ADD COLUMN IF NOT EXISTS `sold_by`      int(11)       DEFAULT NULL;
+ALTER TABLE `sales_retail` ADD COLUMN IF NOT EXISTS `refunded`     tinyint(1)    NOT NULL DEFAULT 0;
+
+-- ── loans: client_id link ─────────────────────────────────────────────────────
+ALTER TABLE `loans` ADD COLUMN IF NOT EXISTS `client_id` int(11) DEFAULT NULL;
+ALTER TABLE `loans` ADD INDEX  IF NOT EXISTS `idx_client_id` (`client_id`);
+
+-- ── loans: backfill client_id from loan_clients (for rows inserted before client_id was tracked)
+UPDATE `loans` l
+JOIN `loan_clients` lc
+    ON  lc.`name`  = l.`client`
+    AND (lc.`phone` = l.`phone` OR (lc.`phone` = '' AND (l.`phone` IS NULL OR l.`phone` = '')))
+SET l.`client_id` = lc.`id`
+WHERE l.`client_id` IS NULL;
+
+-- ── product_owners: external sale owners ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `product_owners` (
+  `id`         int(11)      NOT NULL AUTO_INCREMENT,
+  `name`       varchar(100) NOT NULL,
+  `phone`      varchar(20)  DEFAULT NULL,
+  `created_at` timestamp    NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ── sales_external: tracking-only sales (not from stock) ─────────────────────
+CREATE TABLE IF NOT EXISTS `sales_external` (
+  `id`            int(11)       NOT NULL AUTO_INCREMENT,
+  `product_name`  varchar(200)  NOT NULL,
+  `owner_id`      int(11)       DEFAULT NULL,
+  `quantity`      int(11)       NOT NULL DEFAULT 1,
+  `unit_price`    decimal(10,2) NOT NULL DEFAULT 0.00,
+  `total_amount`  decimal(10,2) NOT NULL DEFAULT 0.00,
+  `cash_amount`   decimal(10,2) NOT NULL DEFAULT 0.00,
+  `momo_amount`   decimal(10,2) NOT NULL DEFAULT 0.00,
+  `loan_amount`   decimal(10,2) NOT NULL DEFAULT 0.00,
+  `my_revenue`    decimal(10,2) NOT NULL DEFAULT 0.00,
+  `customer_name` varchar(100)  DEFAULT NULL,
+  `phone`         varchar(20)   DEFAULT NULL,
+  `sale_date`     date          DEFAULT NULL,
+  `sold_by`       int(11)       DEFAULT NULL,
+  `refunded`      tinyint(1)    NOT NULL DEFAULT 0,
+  `created_at`    timestamp     NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ── refunds: return / loss records ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `refunds` (
+  `id`            int(11)                              NOT NULL AUTO_INCREMENT,
+  `sale_type`     enum('bulk','retail','external')     NOT NULL,
+  `sale_id`       int(11)                              NOT NULL,
+  `product_id`    int(11)                              DEFAULT NULL,
+  `product_name`  varchar(200)                         DEFAULT NULL,
+  `quantity`      int(11)                              NOT NULL DEFAULT 0,
+  `refund_amount` decimal(10,2)                        NOT NULL DEFAULT 0.00,
+  `loss_amount`   decimal(10,2)                        DEFAULT NULL,
+  `reason`        text                                 DEFAULT NULL,
+  `back_to_stock` tinyint(1)                           NOT NULL DEFAULT 0,
+  `refund_date`   date                                 NOT NULL,
+  `processed_by`  int(11)                              DEFAULT NULL,
+  `created_at`    timestamp                            NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- ── Seed loan_clients from existing loans ────────────────────────────────────
 INSERT IGNORE INTO `loan_clients` (name, phone, total_loans, paid_amount, unpaid_amount)
 SELECT
