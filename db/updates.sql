@@ -98,26 +98,6 @@ CREATE TABLE IF NOT EXISTS `product_owners` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- ── sales_external: tracking-only sales (not from stock) ─────────────────────
-CREATE TABLE IF NOT EXISTS `sales_external` (
-  `id`            int(11)       NOT NULL AUTO_INCREMENT,
-  `product_name`  varchar(200)  NOT NULL,
-  `owner_id`      int(11)       DEFAULT NULL,
-  `quantity`      int(11)       NOT NULL DEFAULT 1,
-  `unit_price`    decimal(10,2) NOT NULL DEFAULT 0.00,
-  `total_amount`  decimal(10,2) NOT NULL DEFAULT 0.00,
-  `cash_amount`   decimal(10,2) NOT NULL DEFAULT 0.00,
-  `momo_amount`   decimal(10,2) NOT NULL DEFAULT 0.00,
-  `loan_amount`   decimal(10,2) NOT NULL DEFAULT 0.00,
-  `my_revenue`    decimal(10,2) NOT NULL DEFAULT 0.00,
-  `customer_name` varchar(100)  DEFAULT NULL,
-  `phone`         varchar(20)   DEFAULT NULL,
-  `sale_date`     date          DEFAULT NULL,
-  `sold_by`       int(11)       DEFAULT NULL,
-  `refunded`      tinyint(1)    NOT NULL DEFAULT 0,
-  `created_at`    timestamp     NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ── refunds: return / loss records ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS `refunds` (
