@@ -13,6 +13,34 @@ mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `purchase_levels` (
     INDEX (`purchase_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
+// ── AJAX: last purchase cost hint ────────────────────────────────────────────
+if (isset($_GET['action']) && $_GET['action'] === 'last_purchase') {
+    header('Content-Type: application/json');
+    $pid = (int)($_GET['product_id'] ?? 0);
+    $r = $pid ? mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT purchase_date, cost_price FROM purchases WHERE product_id = $pid ORDER BY id DESC LIMIT 1"
+    )) : null;
+    echo json_encode($r ?: null);
+    exit;
+}
+
+// ── Repeat purchase: pre-load previous purchase data ─────────────────────────
+$repeat_data = null;
+if (isset($_GET['repeat'])) {
+    $rep_id = (int)$_GET['repeat'];
+    $rep = mysqli_fetch_assoc(mysqli_query($conn, "
+        SELECT pu.*, pr.name AS product_name, pr.category
+        FROM purchases pu JOIN products pr ON pu.product_id = pr.id
+        WHERE pu.id = $rep_id
+    "));
+    if ($rep) {
+        $rep_levels = [];
+        $lq = mysqli_query($conn, "SELECT * FROM purchase_levels WHERE purchase_id = $rep_id ORDER BY level_order");
+        if ($lq) while ($l = mysqli_fetch_assoc($lq)) $rep_levels[] = $l;
+        $repeat_data = ['purchase' => $rep, 'levels' => $rep_levels];
+    }
+}
+
 // ── AJAX handler ─────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -350,11 +378,12 @@ while ($r = mysqli_fetch_assoc($suppliers_r)) $suppliers[] = $r;
                         <label>Cost Price per unit (RWF) *</label>
                         <input type="text" name="cost_price" id="cost_price" min="0" step="1"
                                placeholder="0" oninput="updateSummary();suggestPrices()">
+                        <div id="last-purchase-hint" style="font-size:12px;color:var(--secondary);margin-top:4px;min-height:16px;"></div>
                     </div>
 
                     <div class="form-group">
-                        <label for="suggest_rate">Markup Rate <small style="color:var(--secondary);font-weight:400;">(e.g. 1.05 = 5% profit)</small></label>
-                        <input type="text" id="suggest_rate" value="1.05" style="max-width:120px;"
+                        <label for="suggest_rate">% Markup <small style="color:var(--secondary);font-weight:400;">(e.g. 5 = add 5% on cost)</small></label>
+                        <input type="text" id="suggest_rate" value="5" style="max-width:120px;"
                                oninput="suggestPrices()">
                     </div>
                 </div>
@@ -520,8 +549,23 @@ function submitPurchase() {
         search.value = o.textContent.trim();
         dropdown.classList.remove('open');
         hlIdx = -1;
+        fetchLastPurchase(o.dataset.value);
     }
 })();
+
+function fetchLastPurchase(productId) {
+    var hint = document.getElementById('last-purchase-hint');
+    hint.textContent = '';
+    if (!productId) return;
+    fetch('new-purchase.php?action=last_purchase&product_id=' + encodeURIComponent(productId))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d && d.cost_price) {
+                hint.textContent = 'Last bought: RWF ' + parseInt(d.cost_price).toLocaleString() + ' on ' + d.purchase_date;
+            }
+        })
+        .catch(function() {});
+}
 
 // ── Level builder ─────────────────────────────────────────────────────────────
 var levelCount = 0;
@@ -612,7 +656,8 @@ function updateLabels() {
 function suggestPrices() {
     var cost = parseFloat(document.getElementById('cost_price').value) || 0;
     if (cost <= 0) return;
-    var rate = parseFloat(document.getElementById('suggest_rate').value) || 1;
+    var pct = parseFloat(document.getElementById('suggest_rate').value) || 0;
+    var rate = 1 + pct / 100;
     if (rate <= 0) return;
     var rows = document.getElementById('levelsContainer').querySelectorAll('.level-row');
     var divisor = 1;
@@ -626,10 +671,8 @@ function suggestPrices() {
             priceInput.value = Math.round(cost / divisor * rate);
         }
     });
-    // Update label hints on all level price fields
-    var pct = Math.round((rate - 1) * 100);
     document.querySelectorAll('.level-price-hint').forEach(function(el) {
-        el.textContent = '×' + rate.toFixed(2) + ' (' + (pct >= 0 ? '+' : '') + pct + '%)';
+        el.textContent = pct !== 0 ? '(+' + pct + '% markup)' : '';
     });
 }
 
@@ -661,10 +704,18 @@ function updateSummary() {
     var topName   = rows[0].querySelector('input[name="level_name[]"]').value.trim() || 'unit';
     var botName   = rows[rows.length-1].querySelector('input[name="level_name[]"]').value.trim() || 'piece';
 
+    var lastPriceInput = rows[rows.length - 1].querySelector('input[name="level_price[]"]');
+    var lastPrice    = parseFloat(lastPriceInput ? lastPriceInput.value : 0) || 0;
+    var totalRevenue = running * lastPrice;
+    var profit       = totalRevenue - totalCost;
+    var profitPct    = totalCost > 0 ? Math.round(profit / totalCost * 100) : 0;
+    var profitColor  = profit >= 0 ? '#16a34a' : '#dc2626';
+
     total.innerHTML =
         '<strong>' + qty.toLocaleString() + '</strong> ' + escHtml(topName) +
         (rows.length > 1 ? ' = <strong>' + running.toLocaleString() + '</strong> ' + escHtml(botName) : '') +
-        (totalCost > 0 ? ' &nbsp;|&nbsp; Total cost: <strong>RWF ' + totalCost.toLocaleString() + '</strong>' : '');
+        (totalCost > 0 ? ' &nbsp;|&nbsp; Cost: <strong>RWF ' + totalCost.toLocaleString() + '</strong>' : '') +
+        (totalRevenue > 0 ? ' &nbsp;|&nbsp; Revenue: <strong>RWF ' + Math.round(totalRevenue).toLocaleString() + '</strong> <span style="color:' + profitColor + ';font-weight:700;">(' + (profit >= 0 ? '+' : '') + profitPct + '%)</span>' : '');
 }
 
 function escHtml(s) {
@@ -726,6 +777,42 @@ function loadPreset(key, btn) {
 }
 
 addLevel();
+
+<?php if ($repeat_data): ?>
+(function() {
+    var d = <?= json_encode($repeat_data) ?>;
+    var p = d.purchase;
+    var lvls = d.levels;
+
+    document.getElementById('product_id').value = p.product_id;
+    document.getElementById('product_search').value =
+        (p.category ? p.category + ' — ' : '') + p.product_name;
+    document.getElementById('quantity').value = p.quantity;
+    document.getElementById('cost_price').value = p.cost_price;
+
+    var container = document.getElementById('levelsContainer');
+    container.innerHTML = '';
+    levelCount = 0;
+
+    lvls.forEach(function(lvl, i) {
+        addLevel();
+        var rows = container.querySelectorAll('.level-row');
+        var row  = rows[rows.length - 1];
+        row.querySelector('input[name="level_name[]"]').value = lvl.level_name;
+        if (i > 0) {
+            var qInput = row.querySelector('input[name="level_qty[]"]');
+            if (qInput) qInput.value = lvl.qty_per_parent;
+        }
+        var pInput = row.querySelector('input[name="level_price[]"]');
+        if (pInput) { pInput.value = lvl.selling_price; pInput.dataset.edited = '1'; }
+    });
+
+    updateSummary();
+    updateLabels();
+    fetchLastPurchase(p.product_id);
+    showToast('Pre-filled from previous purchase — adjust as needed.', 'success');
+})();
+<?php endif; ?>
 </script>
 </body>
 </html>

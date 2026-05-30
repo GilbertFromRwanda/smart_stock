@@ -325,6 +325,7 @@ if (!empty($all_rows)) {
                                     data-retail-price="<?php echo $row['retail_price']; ?>"
                                     data-date="<?php echo date('Y-m-d', strtotime($row['purchase_date'])); ?>"
                                     onclick="openEditPurchase(this)">Edit</button>
+                                <a href="new-purchase.php?repeat=<?= $row['id'] ?>" class="btn btn-sm btn-primary" style="margin-left:4px;">Repeat</a>
                             </td>
                         </tr>
                         <?php
