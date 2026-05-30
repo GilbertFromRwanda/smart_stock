@@ -297,8 +297,8 @@ if (($today_sales['total'] ?? 0) == 0) {
             <!-- Welcome Message -->
             <div class="welcome-message">
                 <div>
-                    <h2>Welcome back, <?php echo explode(' ', $_SESSION['full_name'] ?? $_SESSION['username'])[0]; ?>! 👋</h2>
-                    <p><?php echo date('l, F j, Y'); ?> - Here's your business overview</p>
+                    <h2>Welcome back, <?php echo explode(' ', $_SESSION['full_name'] ?? $_SESSION['username'])[0]; ?></h2>
+                    <p><?php echo date('l, F j, Y'); ?> &nbsp;·&nbsp; Here's your business overview</p>
                 </div>
                 <div class="welcome-time">
                     <?php 

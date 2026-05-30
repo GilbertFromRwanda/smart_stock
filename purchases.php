@@ -139,61 +139,90 @@ if (!empty($all_rows)) {
     <title>Purchases - Small Stock Management</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
-        .lv-chain { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 2px; }
-        .lv-node  { display: inline-flex; flex-direction: column; font-size: 12px; }
-        .lv-name  { font-weight: 600; color: var(--dark); }
-        .lv-name em { font-style: normal; color: var(--secondary); font-weight: 400; }
-        .lv-price { color: var(--primary); font-weight: 700; font-size: 11px; }
-        .lv-arrow { color: var(--gray-300); font-size: 14px; padding: 2px 1px; align-self: center; }
-
-        .searchable-select {
-            position: relative;
+        /* ── Page header ──────────────────────────────────────────────────── */
+        .page-header {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            flex-wrap: wrap; gap: 16px; margin-bottom: 24px;
         }
+        .page-header h1 { font-size: 24px; font-weight: 700; color: var(--dark); margin: 0; }
+        .page-subtitle  { font-size: 14px; color: var(--secondary); margin: 4px 0 0; }
+        .ph-actions     { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+        /* ── Inline date filter ───────────────────────────────────────────── */
+        .filter-inline {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            background: var(--white); border: 1px solid var(--gray-200);
+            border-radius: var(--radius); padding: 6px 12px;
+        }
+        .filter-inline input[type="date"] {
+            border: none; outline: none; font-size: 13px; color: var(--dark);
+            background: transparent; padding: 2px 0;
+        }
+        .filter-sep { font-size: 12px; color: var(--gray-300); font-weight: 600; }
+        .btn-clear {
+            font-size: 12px; color: var(--secondary); text-decoration: none;
+            padding: 4px 8px; border-radius: var(--radius);
+            background: none; border: none; cursor: pointer;
+        }
+        .btn-clear:hover { color: var(--danger); }
+
+        /* ── Date jump bar ────────────────────────────────────────────────── */
+        .date-jump-bar {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+        }
+        .date-jump-label { font-size: 12px; color: var(--secondary); font-weight: 600; }
+        .date-jump-select {
+            padding: 6px 12px; border: 1px solid var(--gray-200);
+            border-radius: var(--radius); font-size: 13px;
+            background: var(--white); color: var(--dark);
+            min-width: 200px; cursor: pointer;
+        }
+
+        /* ── Level chain ──────────────────────────────────────────────────── */
+        .lv-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+        .lv-arrow { color: #cbd5e1; font-size: 13px; padding: 0 2px; align-self: center; }
+        .lv-node {
+            display: inline-flex; flex-direction: column; align-items: center;
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+            padding: 5px 10px; min-width: 64px; text-align: center; gap: 2px;
+        }
+        .lv-name {
+            font-size: 11px; font-weight: 700; color: #475569;
+            text-transform: uppercase; letter-spacing: .3px;
+        }
+        .lv-name em { font-style: normal; color: #94a3b8; font-weight: 400; text-transform: none; }
+        .lv-price   { font-size: 11px; font-weight: 700; color: #3b82f6; }
+
+        /* ── Date subtotal row ────────────────────────────────────────────── */
+        tr.date-subtotal td {
+            background: #f8fafc !important; font-size: 12px; color: var(--secondary);
+            padding: 7px 20px !important; border-top: 1px dashed var(--gray-200);
+        }
+        tr.date-subtotal td strong { color: var(--dark); font-size: 13px; }
+
+        /* ── Searchable select ────────────────────────────────────────────── */
+        .searchable-select { position: relative; }
         .searchable-select-input {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid var(--gray-300);
-            border-radius: var(--radius);
-            font-size: 14px;
-            background: var(--white);
-            cursor: text;
+            width: 100%; padding: 10px 12px;
+            border: 1px solid var(--gray-300); border-radius: var(--radius);
+            font-size: 14px; background: var(--white); cursor: text;
         }
         .searchable-select-input:focus {
-            outline: none;
-            border-color: var(--primary);
+            outline: none; border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
         }
         .searchable-select-dropdown {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            max-height: 200px;
-            overflow-y: auto;
-            background: var(--white);
-            border: 1px solid var(--gray-300);
-            border-top: none;
+            display: none; position: absolute; top: 100%; left: 0; right: 0;
+            max-height: 200px; overflow-y: auto; background: var(--white);
+            border: 1px solid var(--gray-300); border-top: none;
             border-radius: 0 0 var(--radius) var(--radius);
-            z-index: 1000;
-            box-shadow: var(--shadow-md);
+            z-index: 1000; box-shadow: var(--shadow-md);
         }
-        .searchable-select-dropdown.open {
-            display: block;
-        }
-        .searchable-select-option {
-            padding: 9px 12px;
-            cursor: pointer;
-            font-size: 14px;
-        }
+        .searchable-select-dropdown.open { display: block; }
+        .searchable-select-option { padding: 9px 12px; cursor: pointer; font-size: 14px; }
         .searchable-select-option:hover,
-        .searchable-select-option.highlighted {
-            background: var(--gray-100);
-            color: var(--primary);
-        }
-        .searchable-select-option.hidden {
-            display: none;
-        }
+        .searchable-select-option.highlighted { background: var(--gray-100); color: var(--primary); }
+        .searchable-select-option.hidden { display: none; }
     </style>
 </head>
 <body>
@@ -201,27 +230,25 @@ if (!empty($all_rows)) {
         <?php include 'sidebar.php'; ?>
         
         <div class="main-content">
-            <h1>Purchase Management</h1>
-            
-            <div class="action-bar">
-                <a href="new-purchase.php" class="btn btn-primary">New Purchase</a>
-                <a href="suppliers.php" class="btn btn-secondary">Manage Suppliers</a>
+            <div class="page-header">
+                <div>
+                    <h1>Purchases</h1>
+                    <p class="page-subtitle">Stock purchases &amp; supplier transactions &nbsp;·&nbsp; <?php echo count($all_rows); ?> record<?php echo count($all_rows) != 1 ? 's' : ''; ?></p>
+                </div>
+                <div class="ph-actions">
+                    <form method="GET" class="filter-inline">
+                        <input type="date" id="date_from" name="date_from" value="<?php echo htmlspecialchars($date_from); ?>">
+                        <span class="filter-sep">–</span>
+                        <input type="date" id="date_to" name="date_to" value="<?php echo htmlspecialchars($date_to); ?>">
+                        <button type="submit" class="btn btn-sm btn-secondary">Filter</button>
+                        <?php if ($date_from || $date_to): ?>
+                            <a href="purchases.php" class="btn-clear">✕ Clear</a>
+                        <?php endif; ?>
+                    </form>
+                    <a href="new-purchase.php" class="btn btn-primary">+ New Purchase</a>
+                    <a href="suppliers.php" class="btn btn-secondary">Suppliers</a>
+                </div>
             </div>
-
-            <form method="GET" class="date-filter-bar">
-                <div class="filter-group">
-                    <label for="date_from">From</label>
-                    <input type="date" id="date_from" name="date_from" value="<?php echo htmlspecialchars($date_from); ?>">
-                </div>
-                <div class="filter-group">
-                    <label for="date_to">To</label>
-                    <input type="date" id="date_to" name="date_to" value="<?php echo htmlspecialchars($date_to); ?>">
-                </div>
-                <button type="submit" class="btn btn-primary">Filter</button>
-                <?php if ($date_from || $date_to): ?>
-                    <a href="purchases.php" class="btn btn-secondary">Clear</a>
-                <?php endif; ?>
-            </form>
             
             <?php if (isset($success)): ?>
                 <div class="alert alert-success"><?php echo $success; ?></div>
@@ -231,10 +258,17 @@ if (!empty($all_rows)) {
                 <div class="alert alert-danger"><?php echo $error; ?></div>
             <?php endif; ?>
             
-            <div id="date-group-filters" style="margin-bottom:12px;display:none;">
-                <select id="date-group-select" style="padding:7px 12px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:14px;min-width:220px;">
-                    <option value="all">All dates</option>
-                </select>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+                <input type="text" id="txtSearchPurchases"
+                    style="flex:1;min-width:200px;max-width:340px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;background:var(--gray-100);"
+                    placeholder="Search product, supplier…"
+                    oninput="searchPurchases(this.value)">
+                <div id="date-group-filters" class="date-jump-bar" style="display:none;margin-bottom:0;">
+                    <span class="date-jump-label">Jump to:</span>
+                    <select id="date-group-select" class="date-jump-select">
+                        <option value="all">All dates</option>
+                    </select>
+                </div>
             </div>
 
             <div class="table-responsive">
@@ -311,7 +345,7 @@ if (!empty($all_rows)) {
                                     <small>Retail: RWF <?= number_format($row['retail_price'], 0) ?></small>
                                 <?php endif; ?>
                             </td>
-                            <td><?php echo htmlspecialchars($row['supplier_name'] ?? 'N/A'); ?></td>
+                            <td><?php echo $row['supplier_name'] ? htmlspecialchars($row['supplier_name']) : '<span style="color:var(--gray-300);">—</span>'; ?></td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-secondary"
                                     data-id="<?php echo $row['id']; ?>"
@@ -416,7 +450,48 @@ if (!empty($all_rows)) {
 
     <script src="script.js"></script>
     <script>
-        createAdvancedTableSearch('txtSearchPurchases', 'tblPurchases', []);
+        function searchPurchases(term) {
+            term = (term || '').toLowerCase().trim();
+            var table    = document.getElementById('tblPurchases');
+            var headers  = table.querySelectorAll('tr.date-group-header');
+            var dataRows = table.querySelectorAll('tr.date-group-row');
+            var subRows  = table.querySelectorAll('tr.date-subtotal');
+
+            if (!term) {
+                // Restore default: all headers visible, only group 0 expanded
+                headers.forEach(function(h) { h.style.display = ''; });
+                dataRows.forEach(function(r) {
+                    r.style.display = r.getAttribute('data-group') === '0' ? '' : 'none';
+                });
+                subRows.forEach(function(r) {
+                    r.style.display = r.getAttribute('data-group') === '0' ? '' : 'none';
+                });
+                return;
+            }
+
+            // Find which groups have at least one matching row
+            var matchGroups = {};
+            dataRows.forEach(function(r) {
+                if (r.textContent.toLowerCase().includes(term))
+                    matchGroups[r.getAttribute('data-group')] = true;
+            });
+
+            // Show/hide date headers
+            headers.forEach(function(h) {
+                h.style.display = matchGroups[h.getAttribute('data-toggle')] ? '' : 'none';
+            });
+
+            // Show/hide data rows (only matching rows in matching groups)
+            dataRows.forEach(function(r) {
+                var g = r.getAttribute('data-group');
+                r.style.display = (matchGroups[g] && r.textContent.toLowerCase().includes(term)) ? '' : 'none';
+            });
+
+            // Show/hide subtotals for matching groups
+            subRows.forEach(function(r) {
+                r.style.display = matchGroups[r.getAttribute('data-group')] ? '' : 'none';
+            });
+        }
 
         // Searchable product select
         (function() {

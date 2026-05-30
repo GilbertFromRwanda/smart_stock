@@ -552,3 +552,110 @@
     .dark .price-value {
         color: #f1f5f9;
     }
+
+/* ── Page header ──────────────────────────────────────────────────────────── */
+.page-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px; margin-bottom: 24px;
+}
+.page-header h1 { font-size: 24px; font-weight: 700; color: var(--dark); margin: 0; }
+.page-subtitle  { font-size: 14px; color: var(--secondary); margin: 4px 0 0; }
+.ph-actions     { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ── Inline date filter (shared with purchases) ───────────────────────────── */
+.filter-inline {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: var(--white); border: 1px solid var(--gray-200);
+    border-radius: var(--radius); padding: 6px 12px;
+}
+.filter-inline input[type="date"] {
+    border: none; outline: none; font-size: 13px; color: var(--dark);
+    background: transparent; padding: 2px 0;
+}
+.filter-sep { font-size: 12px; color: var(--gray-300); font-weight: 600; }
+.btn-clear {
+    font-size: 12px; color: var(--secondary); text-decoration: none;
+    padding: 4px 8px; border-radius: var(--radius);
+    background: none; border: none; cursor: pointer;
+}
+.btn-clear:hover { color: var(--danger); }
+
+/* ── Sale CTA cards ───────────────────────────────────────────────────────── */
+.sale-cta-row {
+    display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap;
+}
+.sale-cta-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: 22px 36px; border: none; border-radius: 16px;
+    cursor: pointer; min-width: 180px; transition: transform .15s, box-shadow .15s;
+    text-align: center;
+}
+.sale-cta-btn:hover { transform: translateY(-3px); }
+.sale-cta-btn:active { transform: scale(.98); }
+.bulk-cta {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff;
+    box-shadow: 0 4px 18px rgba(59,130,246,.35);
+}
+.bulk-cta:hover { box-shadow: 0 8px 28px rgba(59,130,246,.45); }
+.retail-cta {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    box-shadow: 0 4px 18px rgba(16,185,129,.35);
+}
+.retail-cta:hover { box-shadow: 0 8px 28px rgba(16,185,129,.45); }
+.cta-icon  { font-size: 30px; line-height: 1; }
+.cta-label { font-size: 16px; font-weight: 700; }
+.cta-sub   { font-size: 12px; opacity: .80; font-weight: 400; }
+
+/* ── Recent sales section ─────────────────────────────────────────────────── */
+.recent-sales {
+    background: var(--white); border-radius: 16px;
+    border: 1px solid var(--gray-200);
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    overflow: hidden;
+}
+
+/* ── Sales tab nav ────────────────────────────────────────────────────────── */
+.sales-tab-nav {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--gray-200);
+    background: var(--gray-100); padding: 0 20px;
+    margin-bottom: 0;
+}
+.sales-tab-btn {
+    display: flex; align-items: center; gap: 7px;
+    padding: 13px 18px; border: none; background: none;
+    font-size: 13.5px; font-weight: 500; color: var(--secondary);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; transition: color .15s, border-color .15s;
+    white-space: nowrap;
+}
+.sales-tab-btn:hover { color: var(--dark); }
+.sales-tab-btn.active {
+    color: var(--primary); border-bottom-color: var(--primary); font-weight: 600;
+}
+
+/* ── Tab panel padding ────────────────────────────────────────────────────── */
+.sales-tab-panel { padding: 20px; }
+
+/* ── Search input ─────────────────────────────────────────────────────────── */
+.sale-search {
+    width: 100%; max-width: 340px;
+    padding: 8px 12px; border: 1px solid var(--gray-200);
+    border-radius: var(--radius); font-size: 13px;
+    background: var(--gray-100); color: var(--dark);
+    transition: border-color .15s, background .15s;
+}
+.sale-search:focus {
+    outline: none; border-color: var(--primary);
+    background: var(--white); box-shadow: 0 0 0 3px rgba(37,99,235,.08);
+}
+
+/* ── Table action buttons ─────────────────────────────────────────────────── */
+.btn-edit   { background: #f59e0b !important; color: #fff !important; }
+.btn-edit:hover { background: #d97706 !important; }
+.btn-refund { background: #8b5cf6 !important; color: #fff !important; }
+.btn-refund:hover { background: #7c3aed !important; }
+.btn-delete { background: #ef4444 !important; color: #fff !important; }
+.btn-delete:hover { background: #dc2626 !important; }

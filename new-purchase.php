@@ -2,16 +2,6 @@
 require_once 'config.php';
 if (!isLoggedIn()) redirect('login.php');
 
-// Ensure purchase_levels table exists
-mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `purchase_levels` (
-    `id`             INT AUTO_INCREMENT PRIMARY KEY,
-    `purchase_id`    INT NOT NULL,
-    `level_order`    TINYINT NOT NULL,
-    `level_name`     VARCHAR(100) NOT NULL,
-    `qty_per_parent` INT NOT NULL DEFAULT 1,
-    `selling_price`  DECIMAL(10,2) NOT NULL DEFAULT 0,
-    INDEX (`purchase_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
 // ── AJAX: last purchase cost hint ────────────────────────────────────────────
 if (isset($_GET['action']) && $_GET['action'] === 'last_purchase') {
@@ -599,7 +589,7 @@ function addLevel() {
 
         '<div class="form-group">' +
             '<label>Selling Price (RWF) <small class="level-price-hint" style="color:var(--secondary);font-weight:400;"></small></label>' +
-            '<input type="text" name="level_price[]" min="0" step="1" value="0" data-edited="0" oninput="this.dataset.edited=\'1\'">' +
+            '<input type="text" name="level_price[]" min="0" step="1" value="0" data-edited="0" oninput="this.dataset.edited=\'1\';updateSummary()">' +
         '</div>' +
 
         '<button type="button" class="btn-remove" onclick="removeLevel(this)"' +
@@ -804,7 +794,7 @@ addLevel();
             if (qInput) qInput.value = lvl.qty_per_parent;
         }
         var pInput = row.querySelector('input[name="level_price[]"]');
-        if (pInput) { pInput.value = lvl.selling_price; pInput.dataset.edited = '1'; }
+        if (pInput) { pInput.value = lvl.selling_price; pInput.dataset.edited = '0'; }
     });
 
     updateSummary();

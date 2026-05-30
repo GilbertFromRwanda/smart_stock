@@ -5,10 +5,6 @@ if (!isLoggedIn()) {
     redirect('login.php');
 }
 
-// Auto-add level_divisor column to sales_bulk if missing (backward-compatible)
-if (mysqli_num_rows(mysqli_query($conn, "SHOW COLUMNS FROM sales_bulk LIKE 'level_divisor'")) == 0) {
-    mysqli_query($conn, "ALTER TABLE sales_bulk ADD COLUMN level_divisor INT NOT NULL DEFAULT 1 AFTER quantity");
-}
 
 // ── DELETE Bulk Sale ─────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_bulk_sale'])) {
@@ -370,6 +366,9 @@ if (isset($_SESSION['flash_error'])) {
 }
 $last_sale_type = $_SESSION['flash_sale_type'] ?? null;
 unset($_SESSION['flash_sale_type']);
+$active_tab = in_array($last_sale_type, ['bulk','retail'])
+    ? $last_sale_type
+    : (in_array($_GET['tab'] ?? '', ['bulk','retail']) ? $_GET['tab'] : 'retail');
 
 // Get products for bulk sale
 $bulk_products = mysqli_query($conn, "
@@ -577,41 +576,43 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
         <?php include 'sidebar.php'; ?>
         
         <div class="main-content">
-            <h1>Sales Management</h1>
-            
+            <div class="page-header">
+                <div>
+                    <h1>Sales</h1>
+                    <p class="page-subtitle">Record &amp; review bulk and retail transactions</p>
+                </div>
+                <div class="ph-actions">
+                    <form method="GET" class="filter-inline">
+                        <input type="date" name="date_from" value="<?php echo htmlspecialchars($date_from); ?>">
+                        <span class="filter-sep">–</span>
+                        <input type="date" name="date_to" value="<?php echo htmlspecialchars($date_to); ?>">
+                        <input type="hidden" name="tab" value="<?php echo htmlspecialchars($active_tab); ?>">
+                        <button type="submit" class="btn btn-sm btn-secondary">Filter</button>
+                        <a href="sales.php?tab=<?php echo htmlspecialchars($active_tab); ?>" class="btn-clear">Today</a>
+                    </form>
+                </div>
+            </div>
+
             <?php if (isset($success)): ?>
                 <div class="alert alert-success"><?php echo $success; ?></div>
             <?php endif; ?>
-            
             <?php if (isset($error)): ?>
                 <div class="alert alert-danger"><?php echo $error; ?></div>
             <?php endif; ?>
-            
-            <div class="sale-action-buttons">
-                <button class="btn btn-primary btn-lg" onclick="openModal('bulkSaleModal')">+ Kuranguza</button>
-                <button class="btn btn-success btn-lg" onclick="openModal('retailSaleModal')">+ Gucuruza Detaye</button>
+
+            <div class="sale-cta-row">
+                <button class="sale-cta-btn bulk-cta" onclick="openModal('bulkSaleModal')">
+                    <span class="cta-icon">📦</span>
+                    <span class="cta-label">+ Kuranguza</span>
+                    <span class="cta-sub">Sell full packages</span>
+                </button>
+                <button class="sale-cta-btn retail-cta" onclick="openModal('retailSaleModal')">
+                    <span class="cta-icon">🛍️</span>
+                    <span class="cta-label">+ Detaye</span>
+                    <span class="cta-sub">Sell piece by piece</span>
+                </button>
             </div>
-              <?php
-                $active_tab = in_array($last_sale_type, ['bulk','retail'])
-                    ? $last_sale_type
-                    : (in_array($_GET['tab'] ?? '', ['bulk','retail']) ? $_GET['tab'] : 'retail');
-                ?>
             <div class="recent-sales">
-                <h2>Recent Sales</h2>
-                <form method="GET" class="date-filter-form">
-                    <div class="date-filter-group">
-                        <label for="date_from">From</label>
-                        <input type="date" id="date_from" name="date_from" value="<?php echo htmlspecialchars($date_from); ?>">
-                    </div>
-                    <div class="date-filter-group">
-                        <label for="date_to">To</label>
-                        <input type="date" id="date_to" name="date_to" value="<?php echo htmlspecialchars($date_to); ?>">
-                    </div>
-<input type="hidden" id="filter_tab" name="tab" value="<?php echo htmlspecialchars($active_tab); ?>">
-                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-                    <a href="sales.php?tab=<?php echo htmlspecialchars($active_tab); ?>" class="btn btn-sm" style="background:var(--gray-200);color:var(--dark);">Today</a>
-                </form>
-              
                 <div class="sales-tab-nav">
                     <button class="sales-tab-btn<?php echo $active_tab==='bulk'   ? ' active' : ''; ?>" onclick="switchSalesTab('bulk')"  >Ibyaranguwe</button>
                     <button class="sales-tab-btn<?php echo $active_tab==='retail' ? ' active' : ''; ?>" onclick="switchSalesTab('retail')">Ibyacurujwe detaye</button>
@@ -619,8 +620,8 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
 
                 <!-- Bulk tab -->
                 <div class="sales-tab-panel" id="stab-bulk" <?php echo $active_tab!=='bulk'     ? 'style="display:none"' : ''; ?>>
-                <div style="margin-bottom:10px;">
-                    <input type="text" id="search-bulk" placeholder="Search customer, product..." oninput="filterTable('tbl-bulk', this.value)" style="width:100%;max-width:360px;padding:7px 12px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:14px;">
+                <div style="margin-bottom:14px;">
+                    <input type="text" id="search-bulk" class="sale-search" placeholder="Search customer, product…" oninput="filterTable('tbl-bulk', this.value)">
                 </div>
                 <table class="table" id="tbl-bulk">
                     <thead>
@@ -644,21 +645,21 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
                             <td>RWF <?php echo number_format($default_price, 0); ?></td>
                             <td class="<?php echo $diff_class; ?>"><?php echo $price_diff != 0 ? ($price_diff > 0 ? '+' : '') . number_format($price_diff, 0) : '-'; ?></td>
                             <td>RWF <?php echo number_format($row['total_amount'], 0); ?></td>
-                            <td><?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?></td>
+                            <td><?php echo $row['customer_name'] ? htmlspecialchars($row['customer_name']) : '<span style="color:var(--gray-300);">—</span>'; ?></td>
                             <td><?php echo htmlspecialchars($row['seller_name'] ?? '—'); ?></td>
                             <td style="white-space:nowrap;">
                                 <?php if($row['refunded']): ?>
                                 <span style="display:inline-block;padding:3px 10px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:12px;font-weight:600;">&#10006; Refunded</span>
                                 <?php else: ?>
-                                <button class="btn btn-sm" style="background:var(--warning,#f59e0b);color:#fff;padding:3px 8px;"
+                                <button class="btn btn-sm btn-edit"
                                     onclick="openEditBulk(<?php echo $row['id']; ?>,'<?php echo htmlspecialchars($row['sale_date'],ENT_QUOTES); ?>',<?php echo $row['quantity']; ?>,<?php echo $row['package_price']; ?>,'<?php echo htmlspecialchars($row['customer_name']??'',ENT_QUOTES); ?>',<?php echo $row['cash_amount']; ?>,<?php echo $row['momo_amount']; ?>,<?php echo $row['loan_amount']; ?>,'<?php echo htmlspecialchars($row['name'],ENT_QUOTES); ?>')">Edit</button>
-                                <button class="btn btn-sm" style="background:#8b5cf6;color:#fff;padding:3px 8px;"
+                                <button class="btn btn-sm btn-refund"
                                     onclick="openRefundModal('bulk',<?php echo $row['id']; ?>,<?php echo $row['product_id']; ?>,'<?php echo htmlspecialchars($row['name'],ENT_QUOTES); ?>',<?php echo $row['quantity']; ?>,<?php echo $row['total_amount']; ?>)">Refund</button>
                                 <?php endif; ?>
                                 <?php if(!$row['refunded']): ?>
                                 <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this bulk sale and restore stock?')">
                                     <input type="hidden" name="sale_id" value="<?php echo $row['id']; ?>">
-                                    <button type="submit" name="delete_bulk_sale" class="btn btn-sm" style="background:var(--danger,#dc2626);color:#fff;padding:3px 8px;">Del</button>
+                                    <button type="submit" name="delete_bulk_sale" class="btn btn-sm btn-delete">Del</button>
                                 </form>
                                 <?php endif; ?>
                             </td>
@@ -677,8 +678,8 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
 
                 <!-- Retail tab -->
                 <div class="sales-tab-panel" id="stab-retail" <?php echo $active_tab!=='retail'   ? 'style="display:none"' : ''; ?>>
-                <div style="margin-bottom:10px;">
-                    <input type="text" id="search-retail" placeholder="Search customer, product..." oninput="filterTable('tbl-retail', this.value)" style="width:100%;max-width:360px;padding:7px 12px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:14px;">
+                <div style="margin-bottom:14px;">
+                    <input type="text" id="search-retail" class="sale-search" placeholder="Search customer, product…" oninput="filterTable('tbl-retail', this.value)">
                 </div>
                 <table class="table" id="tbl-retail">
                     <thead>
@@ -704,21 +705,21 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
                             <td>RWF <?php echo number_format($default_price, 0); ?></td>
                             <td class="<?php echo $diff_class; ?>"><?php echo abs($price_diff) > 0.005 ? ($price_diff > 0 ? '+' : '') . number_format($price_diff, 0) : '-'; ?></td>
                             <td>RWF <?php echo number_format($row['total_amount'], 0); ?></td>
-                            <td><?php echo htmlspecialchars($row['customer_name'] ?? 'N/A'); ?></td>
+                            <td><?php echo $row['customer_name'] ? htmlspecialchars($row['customer_name']) : '<span style="color:var(--gray-300);">—</span>'; ?></td>
                             <td><?php echo htmlspecialchars($row['seller_name'] ?? '—'); ?></td>
                             <td style="white-space:nowrap;">
                                 <?php if($row['refunded']): ?>
                                 <span style="display:inline-block;padding:3px 10px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:12px;font-weight:600;">&#10006; Refunded</span>
                                 <?php else: ?>
-                                <button class="btn btn-sm" style="background:var(--warning,#f59e0b);color:#fff;padding:3px 8px;"
+                                <button class="btn btn-sm btn-edit"
                                     onclick="openEditRetail(<?php echo $row['id']; ?>,'<?php echo htmlspecialchars($row['sale_date'],ENT_QUOTES); ?>',<?php echo $row['pieces_sold']; ?>,<?php echo $row['retail_price']; ?>,'<?php echo htmlspecialchars($row['customer_name']??'',ENT_QUOTES); ?>',<?php echo $row['cash_amount']; ?>,<?php echo $row['momo_amount']; ?>,<?php echo $row['loan_amount']; ?>,'<?php echo htmlspecialchars($row['name'],ENT_QUOTES); ?>')">Edit</button>
-                                <button class="btn btn-sm" style="background:#8b5cf6;color:#fff;padding:3px 8px;"
+                                <button class="btn btn-sm btn-refund"
                                     onclick="openRefundModal('retail',<?php echo $row['id']; ?>,<?php echo $row['product_id']; ?>,'<?php echo htmlspecialchars($row['name'],ENT_QUOTES); ?>',<?php echo $row['pieces_sold']; ?>,<?php echo $row['total_amount']; ?>)">Refund</button>
                                 <?php endif; ?>
                                 <?php if(!$row['refunded']): ?>
                                 <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this retail sale and restore stock?')">
                                     <input type="hidden" name="sale_id" value="<?php echo $row['id']; ?>">
-                                    <button type="submit" name="delete_retail_sale" class="btn btn-sm" style="background:var(--danger,#dc2626);color:#fff;padding:3px 8px;">Del</button>
+                                    <button type="submit" name="delete_retail_sale" class="btn btn-sm btn-delete">Del</button>
                                 </form>
                                 <?php endif; ?>
                             </td>

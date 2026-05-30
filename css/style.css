@@ -261,6 +261,27 @@ body {
     font-size: 12px;
 }
 
+.btn-success {
+    background: #10b981;
+    color: #fff;
+    border-color: #10b981;
+}
+.btn-success:hover { background: #059669; }
+
+.btn-warning {
+    background: #f59e0b;
+    color: #fff;
+    border-color: #f59e0b;
+}
+.btn-warning:hover { background: #d97706; }
+
+.btn-danger {
+    background: #ef4444;
+    color: #fff;
+    border-color: #ef4444;
+}
+.btn-danger:hover { background: #dc2626; }
+
 .btn-block {
     display: block;
     width: 100%;

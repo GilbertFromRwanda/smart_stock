@@ -79,23 +79,24 @@ function build_rows($result, $offset) {
         $js_name  = addslashes($name);
         $js_cat   = addslashes($cat);
         $js_um    = addslashes($um);
+        $cat_badge = $cat ? "<span class='cat-badge'>{$cat}</span>" : "<span style='color:var(--gray-300);'>—</span>";
         $html .= "<tr>
-            <td>{$i}</td>
-            <td>{$name}</td>
-            <td>{$cat}</td>
+            <td style='color:var(--secondary);font-size:12px;'>{$i}</td>
+            <td style='font-weight:600;'>{$name}</td>
+            <td>{$cat_badge}</td>
             <td>{$row['reorder_level']}</td>
             <td>{$um}</td>
             <td>RWF " . number_format($row['unit_price'], 0) . "</td>
-            <td>
+            <td style='white-space:nowrap;'>
                 <a href='#' class='btn btn-sm btn-warning'
                     onclick=\"editProduct({$row['id']},'$js_name','$js_cat',{$row['reorder_level']},'$js_um',{$row['unit_price']})\">Edit</a>
-                <a href='products.php?delete={$row['id']}' onclick=\"return confirm('Are you sure?')\"
+                <a href='products.php?delete={$row['id']}' onclick=\"return confirm('Delete this product?')\"
                     class='btn btn-sm btn-danger'>Delete</a>
             </td>
         </tr>";
         $i++;
     }
-    if ($html === '') $html = "<tr><td colspan='7' style='text-align:center;color:var(--secondary);padding:32px;'>No products found.</td></tr>";
+    if ($html === '') $html = "<tr><td colspan='7' style='text-align:center;color:var(--secondary);padding:40px;font-size:14px;'>No products found.</td></tr>";
     return $html;
 }
 
@@ -142,11 +143,39 @@ if (isset($_GET['ajax'])) {
     <title>Products - Small Stock Management</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
+        /* Page header */
+        .page-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+        .page-header h1 { font-size:24px; font-weight:700; color:var(--dark); margin:0; }
+        .page-subtitle  { font-size:14px; color:var(--secondary); margin:4px 0 0; }
+
+        /* Product card */
+        .prod-card {
+            background:var(--white); border-radius:16px;
+            border:1px solid var(--gray-200);
+            box-shadow:0 1px 4px rgba(0,0,0,.06);
+            padding:20px 24px;
+        }
+
+        /* Toolbar */
         .products-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
-        .search-wrap { position:relative; flex:1; min-width:200px; max-width:360px; }
-        .search-wrap input { width:100%; padding:8px 36px 8px 12px; border:1px solid var(--gray-200); border-radius:8px; font-size:14px; box-sizing:border-box; }
+        .search-wrap { position:relative; flex:1; min-width:200px; max-width:340px; }
+        .search-wrap input {
+            width:100%; padding:8px 36px 8px 12px;
+            border:1px solid var(--gray-200); border-radius:8px; font-size:13px;
+            background:var(--gray-100); box-sizing:border-box; transition:border-color .15s, background .15s;
+        }
+        .search-wrap input:focus { outline:none; border-color:var(--primary); background:var(--white); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
         .search-wrap .search-clear { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; font-size:16px; color:var(--secondary); display:none; line-height:1; }
         .search-wrap input:not(:placeholder-shown) ~ .search-clear { display:block; }
+
+        /* Category badge */
+        .cat-badge {
+            display:inline-block; padding:2px 10px; border-radius:99px;
+            background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:600;
+            white-space:nowrap;
+        }
+
+        /* Pagination */
         .pagination { display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin-top:16px; }
         .pagination a, .pagination span {
             display:inline-flex; align-items:center; justify-content:center;
@@ -158,9 +187,14 @@ if (isset($_GET['ajax'])) {
         .pagination a:hover { background:var(--gray-100); border-color:var(--primary); color:var(--primary); }
         .pagination span.active   { background:var(--primary); color:#fff; border-color:var(--primary); }
         .pagination span.disabled { color:var(--secondary); background:var(--gray-100); cursor:default; }
-        .pagination-info { font-size:13px; color:var(--secondary); margin-top:8px; }
+        .pagination-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-top:14px; }
+        .pagination-info   { font-size:13px; color:var(--secondary); }
+
+        /* Table tweaks */
+        #tblProducts { margin-top:0; }
         #tblProducts tbody { transition: opacity .15s; }
-        #tblProducts tbody.loading { opacity: .4; pointer-events:none; }
+        #tblProducts tbody.loading { opacity:.4; pointer-events:none; }
+        #tblProducts tr:last-child td { border-bottom:none; }
     </style>
 </head>
 <body>
@@ -168,42 +202,51 @@ if (isset($_GET['ajax'])) {
     <?php include 'sidebar.php'; ?>
 
     <div class="main-content">
-        <h1>Product Management</h1>
+        <div class="page-header">
+            <div>
+                <h1>Products</h1>
+                <p class="page-subtitle">All inventory products &nbsp;·&nbsp; <?php echo number_format($total); ?> total</p>
+            </div>
+            <button onclick="openModal('addProductModal')" class="btn btn-primary">+ Add Product</button>
+        </div>
 
         <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
         <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
-        <div class="products-toolbar">
-            <button onclick="openModal('addProductModal')" class="btn btn-primary">Add New Product</button>
-            <div class="search-wrap">
-                <input type="text" id="productSearch" placeholder="Search name or category..."
-                    value="<?php echo htmlspecialchars($search); ?>" autocomplete="off">
-                <button class="search-clear" onclick="clearSearch()" title="Clear">&times;</button>
+        <div class="prod-card">
+            <div class="products-toolbar">
+                <div class="search-wrap">
+                    <input type="text" id="productSearch" placeholder="Search name or category…"
+                        value="<?php echo htmlspecialchars($search); ?>" autocomplete="off">
+                    <button class="search-clear" onclick="clearSearch()" title="Clear">&times;</button>
+                </div>
             </div>
-        </div>
 
-        <div class="table-responsive">
-            <table class="table" id="tblProducts">
-                <thead>
-                    <tr>
-                        <th>No</th><th>Name</th><th>Category</th>
-                        <th>Reorder Level</th><th>Unit Measure</th><th>Unit Price</th><th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="productsBody">
-                    <?php echo build_rows($result, $offset); ?>
-                </tbody>
-            </table>
-        </div>
+            <div class="table-responsive">
+                <table class="table" id="tblProducts">
+                    <thead>
+                        <tr>
+                            <th>#</th><th>Name</th><th>Category</th>
+                            <th>Reorder Level</th><th>Unit</th><th>Unit Price</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsBody">
+                        <?php echo build_rows($result, $offset); ?>
+                    </tbody>
+                </table>
+            </div>
 
-        <div class="pagination" id="productsPagination">
-            <?php echo build_pagination($page, $total_pages); ?>
-        </div>
-        <div class="pagination-info" id="productsInfo">
-            <?php
-            $from = $total > 0 ? $offset + 1 : 0;
-            echo "Showing {$from}–" . min($offset + $per_page, $total) . " of " . number_format($total) . " products";
-            ?>
+            <div class="pagination-footer">
+                <div class="pagination" id="productsPagination">
+                    <?php echo build_pagination($page, $total_pages); ?>
+                </div>
+                <div class="pagination-info" id="productsInfo">
+                    <?php
+                    $from = $total > 0 ? $offset + 1 : 0;
+                    echo "Showing {$from}–" . min($offset + $per_page, $total) . " of " . number_format($total) . " products";
+                    ?>
+                </div>
+            </div>
         </div>
     </div>
 </div>

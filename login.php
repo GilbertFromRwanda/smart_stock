@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .brand-panel {
             display: none;
             flex: 1;
-            background: linear-gradient(145deg, #1e40af 0%, #2563eb 45%, #0ea5e9 100%);
+            background: #0f172a;
             position: relative;
             overflow: hidden;
             flex-direction: column;
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             position: absolute;
             width: 500px; height: 500px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.07);
+            background: rgba(59,130,246,0.07);
             top: -120px; right: -140px;
         }
         .brand-panel::after {
@@ -73,17 +73,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             position: absolute;
             width: 320px; height: 320px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.05);
+            background: rgba(99,102,241,0.06);
             bottom: -80px; left: -80px;
         }
 
         .brand-icon {
             width: 72px; height: 72px;
-            background: rgba(255,255,255,0.15);
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
             border-radius: 20px;
             display: flex; align-items: center; justify-content: center;
             margin-bottom: 28px;
-            backdrop-filter: blur(6px);
         }
 
         .brand-panel h1 {
@@ -97,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .brand-panel p {
             font-size: 15px;
-            color: rgba(255,255,255,0.75);
+            color: #94a3b8;
             text-align: center;
             max-width: 300px;
             line-height: 1.6;
@@ -118,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         .stat-label {
             font-size: 12px;
-            color: rgba(255,255,255,0.65);
+            color: #64748b;
             margin-top: 2px;
         }
 
@@ -129,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             align-items: center;
             justify-content: center;
             padding: 40px 24px;
+            background: #f1f5f9;
         }
 
         @media (min-width: 900px) { .form-panel { flex: 0 0 460px; } }
@@ -136,18 +136,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .login-card {
             width: 100%;
             max-width: 400px;
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+            border: 1px solid #e2e8f0;
         }
 
         .login-card .logo-sm {
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 36px;
+            margin-bottom: 32px;
         }
 
         .logo-sm-icon {
             width: 40px; height: 40px;
-            background: #2563eb;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
             border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
         }
