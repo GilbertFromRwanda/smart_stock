@@ -20,20 +20,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             mysqli_query($conn, "UPDATE users SET last_login = NOW() WHERE id = " . $user['id']);
             echo json_encode(['ok' => true, 'redirect' => 'dashboard.php']);
         } else {
-            echo json_encode(['ok' => false, 'error' => 'Invalid username or password']);
+            echo json_encode(['ok' => false, 'error' => t('login_invalid_credentials')]);
         }
     } else {
-        echo json_encode(['ok' => false, 'error' => 'Invalid username or password']);
+        echo json_encode(['ok' => false, 'error' => t('login_invalid_credentials')]);
     }
     exit;
 }
+
+$_lang_code = $_LANG_CODE;
+$langs = ['en' => 'EN', 'fr' => 'FR', 'rw' => 'RW'];
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?php echo htmlspecialchars($_lang_code); ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UO&amp;GN — Login</title>
+    <title>UO&amp;GN — <?php echo t('page_login'); ?></title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -125,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .form-panel {
             flex: 0 0 100%;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 40px 24px;
@@ -278,6 +282,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: #94a3b8;
             margin-top: 28px;
         }
+
+        /* Language switcher on login */
+        .login-lang {
+            display: flex; gap: 6px; margin-top: 16px;
+        }
+        .login-lang a {
+            font-size: 11px; font-weight: 700; color: #94a3b8;
+            text-decoration: none; padding: 4px 9px; border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            transition: background .15s, color .15s, border-color .15s;
+            letter-spacing: .5px;
+        }
+        .login-lang a:hover { color: #0f172a; border-color: #2563eb; }
+        .login-lang a.lang-active { color: #2563eb; border-color: #2563eb; background: #eff6ff; }
     </style>
 </head>
 <body>
@@ -290,19 +308,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </svg>
         </div>
         <h1>UO&amp;GN<br>Smart Stock</h1>
-        <p>Manage your inventory, track sales, and grow your business with confidence.</p>
+        <p><?php echo t('login_tagline'); ?></p>
         <div class="brand-stats">
             <div class="stat">
                 <div class="stat-value">100%</div>
-                <div class="stat-label">Accurate</div>
+                <div class="stat-label"><?php echo t('login_stat_accurate'); ?></div>
             </div>
             <div class="stat">
-                <div class="stat-value">Real‑time</div>
-                <div class="stat-label">Stock Updates</div>
+                <div class="stat-value">Real&#8209;time</div>
+                <div class="stat-label"><?php echo t('login_stat_realtime'); ?></div>
             </div>
             <div class="stat">
                 <div class="stat-value">Fast</div>
-                <div class="stat-label">& Simple</div>
+                <div class="stat-label"><?php echo t('login_stat_simple'); ?></div>
             </div>
         </div>
     </div>
@@ -320,8 +338,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <span class="logo-sm-text">UO&amp;GN System</span>
             </div>
 
-            <h2>Welcome back</h2>
-            <p class="subtitle">Sign in to your account to continue</p>
+            <h2><?php echo t('login_welcome'); ?></h2>
+            <p class="subtitle"><?php echo t('login_subtitle'); ?></p>
 
             <div class="alert-error" id="login-error" style="display:none">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -332,26 +350,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             <form method="POST" action="">
                 <div class="field">
-                    <label for="username">Username</label>
+                    <label for="username"><?php echo t('login_username'); ?></label>
                     <div class="input-wrap">
                         <span class="input-icon">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                             </svg>
                         </span>
-                        <input type="text" id="username" name="username" placeholder="Enter your username" required autofocus>
+                        <input type="text" id="username" name="username"
+                               placeholder="<?php echo t('login_username_placeholder'); ?>"
+                               required autofocus>
                     </div>
                 </div>
 
                 <div class="field">
-                    <label for="password">Password</label>
+                    <label for="password"><?php echo t('login_password'); ?></label>
                     <div class="input-wrap">
                         <span class="input-icon">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                             </svg>
                         </span>
-                        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                        <input type="password" id="password" name="password"
+                               placeholder="<?php echo t('login_password_placeholder'); ?>"
+                               required>
                         <button type="button" class="toggle-pw" onclick="togglePassword()" title="Show/hide password">
                             <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -360,14 +382,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
 
-                <button type="submit" class="btn-login" id="login-btn">Sign In</button>
+                <button type="submit" class="btn-login" id="login-btn"><?php echo t('login_sign_in'); ?></button>
             </form>
 
-            <p class="footer-note">&copy; <?php echo date('Y'); ?> UO&amp;GN Smart Stock &mdash; All rights reserved</p>
+            <p class="footer-note">&copy; <?php echo date('Y'); ?> UO&amp;GN Smart Stock &mdash; <?php echo t('login_all_rights'); ?></p>
+        </div>
+
+        <!-- Language switcher -->
+        <div class="login-lang">
+            <?php foreach ($langs as $code => $label):
+                $active_cls = ($_lang_code === $code) ? ' lang-active' : '';
+            ?>
+            <a href="set_lang.php?lang=<?php echo $code; ?>" class="<?php echo trim($active_cls); ?>"
+               title="<?php echo t('lang_' . $code); ?>"><?php echo $label; ?></a>
+            <?php endforeach; ?>
         </div>
     </div>
 
     <script>
+        var i18n = <?php echo json_encode([
+            'sign_in'       => t('login_sign_in'),
+            'signing_in'    => t('login_signing_in'),
+            'redirecting'   => t('login_redirecting'),
+            'network_error' => t('login_network_error'),
+        ]); ?>;
+
         document.querySelector('form').addEventListener('submit', function(e) {
             e.preventDefault();
             var btn = document.getElementById('login-btn');
@@ -375,7 +414,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             var errorMsg = document.getElementById('login-error-msg');
 
             btn.disabled = true;
-            btn.textContent = 'Signing in…';
+            btn.textContent = i18n.signing_in;
             errorBox.style.display = 'none';
 
             var body = new FormData(this);
@@ -384,20 +423,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.ok) {
-                        btn.textContent = 'Redirecting…';
+                        btn.textContent = i18n.redirecting;
                         window.location.href = data.redirect;
                     } else {
                         errorMsg.textContent = data.error;
                         errorBox.style.display = 'flex';
                         btn.disabled = false;
-                        btn.textContent = 'Sign In';
+                        btn.textContent = i18n.sign_in;
                     }
                 })
                 .catch(function() {
-                    errorMsg.textContent = 'Network error. Please try again.';
+                    errorMsg.textContent = i18n.network_error;
                     errorBox.style.display = 'flex';
                     btn.disabled = false;
-                    btn.textContent = 'Sign In';
+                    btn.textContent = i18n.sign_in;
                 });
         });
 

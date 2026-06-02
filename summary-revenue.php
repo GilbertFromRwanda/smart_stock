@@ -141,7 +141,7 @@ rsort($all_dates); // newest first
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Revenue Summary</title>
+    <title><?php echo t('page_sumrev'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
         .summary-cards {
@@ -177,7 +177,7 @@ rsort($all_dates); // newest first
 <div class="dashboard-container">
     <?php include 'sidebar.php'; ?>
     <div class="main-content">
-        <h1>Revenue Summary</h1>
+        <h1><?php echo t('sumrev_title'); ?></h1>
 
         <!-- Date filter -->
         <form method="GET" class="date-filter-bar">

@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_consumption'])) {
                 WHERE product_id = $product_id
             ");
             if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success' => true, 'message' => 'Consumption recorded successfully.']); exit; }
-            $_SESSION['flash_success'] = "Consumption recorded successfully.";
+            $_SESSION['flash_success'] = t('cons_added_ok');
         } else {
             $msg = "Error: " . mysqli_error($conn);
             if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success' => false, 'message' => $msg]); exit; }
@@ -193,7 +193,7 @@ if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     if ($con) {
         mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity + {$con['qty']} WHERE product_id = {$con['product_id']}");
         mysqli_query($conn, "DELETE FROM consumption WHERE id=$del_id");
-        $_SESSION['flash_success'] = "Consumption record deleted.";
+        $_SESSION['flash_success'] = t('cons_deleted_ok');
     }
     header("Location: consumption.php");
     exit;
@@ -245,7 +245,7 @@ $total_balance = $stats['total_amount'] - $stats['total_paid'];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home Consumption</title>
+    <title><?php echo t('page_cons'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
         .searchable-select { position: relative; }

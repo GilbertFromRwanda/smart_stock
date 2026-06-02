@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_stock'])) {
             retail_price  = $retail_price
         WHERE product_id = $product_id
     ");
-    $_SESSION['flash_success'] = "Warehouse stock updated.";
+    $_SESSION['flash_success'] = t('stock_updated_ok');
     header("Location: stock.php"); exit;
 }
 
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_retail_stock'])) 
             retail_price    = $retail_price
         WHERE product_id = $product_id
     ");
-    $_SESSION['flash_success'] = "Retail stock updated.";
+    $_SESSION['flash_success'] = t('stock_retail_updated');
     header("Location: stock.php"); exit;
 }
 
@@ -146,7 +146,7 @@ $products = mysqli_query($conn, "SELECT id, name FROM products ORDER BY name");
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Management - Small Stock Management</title>
+    <title><?php echo t('page_stock'); ?> - Smart Stock</title>
         <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -156,7 +156,7 @@ $products = mysqli_query($conn, "SELECT id, name FROM products ORDER BY name");
         <div class="main-content">
             <div class="page-header">
                 <div>
-                    <h1>Stock Management</h1>
+                    <h1><?php echo t('stock_title'); ?></h1>
                     <p class="page-subtitle">Manage warehouse and retail inventory</p>
                 </div>
             </div>

@@ -247,8 +247,8 @@ if ($low_stock_count > 0) {
     $alerts[] = [
         'type' => 'warning',
         'icon' => '⚠️',
-        'title' => 'Low Stock Alert',
-        'message' => "You have {$low_stock_count} product(s) below reorder level. Check stock management.",
+        'title' => t('dash_low_stock_title'),
+        'message' => t('dash_low_stock_msg', $low_stock_count),
         'link' => 'stock.php'
     ];
 }
@@ -261,8 +261,8 @@ if ($retail_empty > 0) {
     $alerts[] = [
         'type' => 'info',
         'icon' => '🛒',
-        'title' => 'Retail Stock Empty',
-        'message' => "{$retail_empty} product(s) have no pieces in retail shop. Move stock from warehouse.",
+        'title' => t('dash_retail_empty_title'),
+        'message' => t('dash_retail_empty_msg', $retail_empty),
         'link' => 'stock.php'
     ];
 }
@@ -272,8 +272,8 @@ if (($today_sales['total'] ?? 0) == 0) {
     $alerts[] = [
         'type' => 'info',
         'icon' => '📉',
-        'title' => 'No Sales Today',
-        'message' => 'You haven\'t recorded any sales today. Start selling!',
+        'title' => t('dash_no_sales_title'),
+        'message' => t('dash_no_sales_msg'),
         'link' => 'sales.php'
     ];
 }
@@ -284,7 +284,7 @@ if (($today_sales['total'] ?? 0) == 0) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Small Stock Management</title>
+    <title><?php echo t('page_dashboard'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/dashboard.css">
     
@@ -297,15 +297,15 @@ if (($today_sales['total'] ?? 0) == 0) {
             <!-- Welcome Message -->
             <div class="welcome-message">
                 <div>
-                    <h2>Welcome back, <?php echo explode(' ', $_SESSION['full_name'] ?? $_SESSION['username'])[0]; ?></h2>
-                    <p><?php echo date('l, F j, Y'); ?> &nbsp;·&nbsp; Here's your business overview</p>
+                    <h2><?php echo t('dash_welcome_back'); ?> <?php echo explode(' ', $_SESSION['full_name'] ?? $_SESSION['username'])[0]; ?></h2>
+                    <p><?php echo date('l, F j, Y'); ?> &nbsp;·&nbsp; <?php echo t('dash_overview'); ?></p>
                 </div>
                 <div class="welcome-time">
                     <?php 
                     $hour = date('H');
-                    if ($hour < 12) echo 'Good Morning';
-                    elseif ($hour < 17) echo 'Good Afternoon';
-                    else echo 'Good Evening';
+                    if ($hour < 12) echo t('dash_good_morning');
+                    elseif ($hour < 17) echo t('dash_good_afternoon');
+                    else echo t('dash_good_evening');
                     ?>
                 </div>
             </div>
@@ -314,24 +314,24 @@ if (($today_sales['total'] ?? 0) == 0) {
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon">📦</div>
-                    <div class="stat-label">Total Products</div>
+                    <div class="stat-label"><?php echo t('dash_total_products'); ?></div>
                     <div class="stat-number"><?php echo number_format($total_products); ?></div>
                     <div class="stat-trend">
-                        <span>Active in inventory</span>
+                        <span><?php echo t('dash_active_inventory'); ?></span>
                     </div>
                     <div class="stat-footer">
-                        <a href="products.php" style="color: #667eea; text-decoration: none;">View all products →</a>
+                        <a href="products.php" style="color: #667eea; text-decoration: none;"><?php echo t('dash_view_all_products'); ?></a>
                     </div>
                 </div>
                 
                 <div class="stat-card">
                     <div class="stat-icon">🏷️</div>
-                    <div class="stat-label">Stock Value (Selling)</div>
+                    <div class="stat-label"><?php echo t('dash_stock_val_selling'); ?></div>
                     <div class="stat-number">RWF <?php echo number_format($selling_stock_value, 0); ?></div>
                     <div class="stat-trend">
                         <span class="stock-status">
                             <span class="stock-dot green"></span>
-                            At selling price
+                            <?php echo t('dash_at_selling_price'); ?>
                         </span>
                     </div>
                     <div class="stat-footer">
@@ -341,7 +341,7 @@ if (($today_sales['total'] ?? 0) == 0) {
 
                 <div class="stat-card">
                     <div class="stat-icon">🧾</div>
-                    <div class="stat-label">Stock Value (Purchase)</div>
+                    <div class="stat-label"><?php echo t('dash_stock_val_cost'); ?></div>
                     <div class="stat-number">RWF <?php echo number_format($total_purchase_stock_value, 0); ?></div>
                     <div class="stat-trend">
                         <span class="stock-status">
@@ -349,17 +349,17 @@ if (($today_sales['total'] ?? 0) == 0) {
                                 $margin = $selling_stock_value > 0 ? ($selling_stock_value - $total_purchase_stock_value) / $selling_stock_value * 100 : 0;
                                 echo $margin >= 15 ? 'green' : ($margin >= 5 ? 'yellow' : 'red');
                             ?>"></span>
-                            At cost price &nbsp;·&nbsp; Margin <?php echo number_format($margin, 1); ?>%
+                            <?php echo t('dash_at_cost_price'); ?> &nbsp;·&nbsp; <?php echo t('dash_margin'); ?> <?php echo number_format($margin, 1); ?>%
                         </span>
                     </div>
                     <div class="stat-footer">
-                        Potential profit: RWF <?php echo number_format($selling_stock_value - $total_purchase_stock_value, 0); ?>
+                        <?php echo t('dash_potential_profit'); ?>: RWF <?php echo number_format($selling_stock_value - $total_purchase_stock_value, 0); ?>
                     </div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-icon">🛒</div>
-                    <div class="stat-label">Today's Sales</div>
+                    <div class="stat-label"><?php echo t('dash_todays_sales'); ?></div>
                     <div class="stat-number">RWF <?php echo number_format($today_sales['total'] ?? 0, 0); ?></div>
                     <div class="stat-trend">
                         <?php 
@@ -374,22 +374,22 @@ if (($today_sales['total'] ?? 0) == 0) {
                         $trend_percent = $yesterday_total > 0 ? ($trend / $yesterday_total) * 100 : 0;
                         ?>
                         <?php if ($trend > 0): ?>
-                            <span class="trend-up">↑ <?php echo number_format($trend_percent, 1); ?>% vs yesterday</span>
+                            <span class="trend-up">↑ <?php echo number_format($trend_percent, 1); ?>% <?php echo t('dash_vs_yesterday'); ?></span>
                         <?php elseif ($trend < 0): ?>
-                            <span class="trend-down">↓ <?php echo number_format(abs($trend_percent), 1); ?>% vs yesterday</span>
+                            <span class="trend-down">↓ <?php echo number_format(abs($trend_percent), 1); ?>% <?php echo t('dash_vs_yesterday'); ?></span>
                         <?php else: ?>
-                            <span>→ Same as yesterday</span>
+                            <span><?php echo t('dash_same_yesterday'); ?></span>
                         <?php endif; ?>
                     </div>
                     <div class="stat-footer">
-                        Bulk: RWF <?php echo number_format($today_sales['bulk_total'] ?? 0, 0); ?> | 
-                        Retail: RWF <?php echo number_format($today_sales['retail_total'] ?? 0, 0); ?>
+                        <?php echo t('dash_warehouse'); ?>: RWF <?php echo number_format($today_sales['bulk_total'] ?? 0, 0); ?> |
+                        <?php echo t('label_retail'); ?>: RWF <?php echo number_format($today_sales['retail_total'] ?? 0, 0); ?>
                     </div>
                 </div>
                 
                 <div class="stat-card">
                     <div class="stat-icon">💵</div>
-                    <div class="stat-label">Today's Revenue</div>
+                    <div class="stat-label"><?php echo t('dash_todays_revenue'); ?></div>
                     <div class="stat-number">RWF <?php echo number_format($today_profit, 0); ?></div>
                     <div class="stat-trend">
                         <?php
@@ -397,11 +397,11 @@ if (($today_sales['total'] ?? 0) == 0) {
                         $today_margin = $today_sales_total > 0 ? ($today_profit / $today_sales_total) * 100 : 0;
                         ?>
                         <?php if ($today_profit > 0): ?>
-                            <span class="trend-up">Margin: <?php echo number_format($today_margin, 1); ?>%</span>
+                            <span class="trend-up"><?php echo t('dash_margin'); ?>: <?php echo number_format($today_margin, 1); ?>%</span>
                         <?php elseif ($today_profit < 0): ?>
-                            <span class="trend-down">Loss today</span>
+                            <span class="trend-down"><?php echo t('dash_loss_today'); ?></span>
                         <?php else: ?>
-                            <span>No profit yet</span>
+                            <span><?php echo t('dash_no_profit_yet'); ?></span>
                         <?php endif; ?>
                     </div>
                     <div class="stat-footer">
@@ -412,14 +412,14 @@ if (($today_sales['total'] ?? 0) == 0) {
 
                 <div class="stat-card">
                     <div class="stat-icon">📊</div>
-                    <div class="stat-label">This Week</div>
+                    <div class="stat-label"><?php echo t('dash_this_week'); ?></div>
                     <div class="stat-number">RWF <?php echo number_format($week_sales, 0); ?></div>
                     <div class="stat-trend">
-                        <span>Sales revenue</span>
+                        <span><?php echo t('dash_sales_revenue'); ?></span>
                     </div>
                     <div class="stat-footer">
-                        Profit: RWF <?php echo number_format($week_profit, 0); ?> |
-                        Margin: <span class="<?php echo $profit_margin >= 20 ? 'trend-up' : ($profit_margin >= 10 ? '' : 'trend-down'); ?>">
+                        <?php echo t('dash_margin'); ?>: RWF <?php echo number_format($week_profit, 0); ?> |
+                        <?php echo t('dash_margin'); ?>: <span class="<?php echo $profit_margin >= 20 ? 'trend-up' : ($profit_margin >= 10 ? '' : 'trend-down'); ?>">
                             <?php echo number_format($profit_margin, 1); ?>%
                         </span>
                     </div>
@@ -427,10 +427,10 @@ if (($today_sales['total'] ?? 0) == 0) {
                 
                 <div class="stat-card">
                     <div class="stat-icon">📈</div>
-                    <div class="stat-label">This Month</div>
+                    <div class="stat-label"><?php echo t('dash_this_month'); ?></div>
                     <div class="stat-number">RWF <?php echo number_format($month_sales, 0); ?></div>
                     <div class="stat-trend">
-                        <span>Monthly target: RWF <?php echo number_format($month_sales * 1.2, 0); ?></span>
+                        <span><?php echo t('dash_monthly_target'); ?>: RWF <?php echo number_format($month_sales * 1.2, 0); ?></span>
                     </div>
                     <div class="stat-footer">
                         <?php 
@@ -438,19 +438,19 @@ if (($today_sales['total'] ?? 0) == 0) {
                         $current_day = date('j');
                         $progress = ($current_day / $days_in_month) * 100;
                         ?>
-                        Month progress: <?php echo number_format($progress, 0); ?>%
+                        <?php echo t('dash_month_progress'); ?>: <?php echo number_format($progress, 0); ?>%
                     </div>
                 </div>
                 
                 <div class="stat-card">
                     <div class="stat-icon">🏪</div>
-                    <div class="stat-label">Retail Shop</div>
+                    <div class="stat-label"><?php echo t('dash_retail_shop'); ?></div>
                     <div class="stat-number"><?php echo number_format($total_retail_pieces); ?> pcs</div>
                     <div class="stat-trend">
-                        <span>Pieces available for retail</span>
+                        <span><?php echo t('dash_pieces_available'); ?></span>
                     </div>
                     <div class="stat-footer">
-                        Value: RWF <?php echo number_format($total_retail_value, 0); ?>
+                        <?php echo t('dash_value'); ?>: RWF <?php echo number_format($total_retail_value, 0); ?>
                     </div>
                 </div>
             </div>
@@ -460,8 +460,8 @@ if (($today_sales['total'] ?? 0) == 0) {
             <div class="alerts-container">
                 <h3 onclick="toggleAlerts()" style="cursor:pointer;user-select:none;">
                     <span style="display:flex;align-items:center;gap:10px;">
-                        Notifications &amp; Alerts
-                        <span class="badge-count"><?php echo count($alerts); ?> new</span>
+                        <?php echo t('dash_notifications'); ?>
+                        <span class="badge-count"><?php echo count($alerts); ?> <?php echo t('dash_new'); ?></span>
                     </span>
                     <span id="alertsChevron" style="font-size:12px;color:var(--secondary);transition:transform .2s;">&#9654;</span>
                 </h3>
@@ -472,7 +472,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                         <div class="alert-content">
                             <div class="alert-title"><?php echo $alert['title']; ?></div>
                             <div class="alert-message"><?php echo $alert['message']; ?></div>
-                            <a href="<?php echo $alert['link']; ?>" class="alert-link">Take action →</a>
+                            <a href="<?php echo $alert['link']; ?>" class="alert-link"><?php echo t('dash_take_action'); ?></a>
                         </div>
                     </div>
                     <?php endforeach; ?>
@@ -501,18 +501,18 @@ if (($today_sales['total'] ?? 0) == 0) {
                     <!-- Header -->
                     <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
                         <div>
-                            <h3 style="margin:0 0 2px;">Collection Breakdown</h3>
-                            <p id="coll-subtitle" style="font-size:12px;color:var(--secondary);margin:0;">Today</p>
+                            <h3 style="margin:0 0 2px;"><?php echo t('dash_collection'); ?></h3>
+                            <p id="coll-subtitle" style="font-size:12px;color:var(--secondary);margin:0;"><?php echo t('label_today'); ?></p>
                         </div>
                         <form id="coll-form" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                             <input type="date" id="coll-from" value="<?php echo $today; ?>"
                                 style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:13px;">
-                            <span style="font-size:12px;color:var(--secondary);">to</span>
+                            <span style="font-size:12px;color:var(--secondary);"><?php echo t('label_to'); ?></span>
                             <input type="date" id="coll-to" value="<?php echo $today; ?>"
                                 style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:13px;">
                             <?php if ($_SESSION['role'] === 'admin'): ?>
                             <select id="coll-user" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:13px;background:var(--white);">
-                                <option value="0">— All users —</option>
+                                <option value="0"><?php echo t('dash_all_users'); ?></option>
                                 <?php while ($u = mysqli_fetch_assoc($users_for_filter)): ?>
                                 <option value="<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['full_name']); ?></option>
                                 <?php endwhile; ?>
@@ -520,10 +520,10 @@ if (($today_sales['total'] ?? 0) == 0) {
                             <?php else: ?>
                             <input type="hidden" id="coll-user" value="<?php echo (int)$_SESSION['user_id']; ?>">
                             <?php endif; ?>
-                            <button type="button" onclick="fetchCollection()" style="padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer;">Filter</button>
+                            <button type="button" onclick="fetchCollection()" style="padding:6px 14px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:13px;cursor:pointer;"><?php echo t('btn_filter'); ?></button>
                             <button type="button" id="coll-today-btn" onclick="fetchCollection('<?php echo $today; ?>','<?php echo $today; ?>',0)"
                                 style="display:none;padding:6px 10px;background:var(--gray-200);color:var(--dark);border:none;border-radius:var(--radius);font-size:13px;cursor:pointer;">Today</button>
-                            <span id="coll-loader" style="display:none;font-size:12px;color:var(--secondary);">Loading…</span>
+                            <span id="coll-loader" style="display:none;font-size:12px;color:var(--secondary);"><?php echo t('label_loading'); ?></span>
                         </form>
                     </div>
 
@@ -535,7 +535,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                             <div style="background:#f0fdf4;border-radius:12px;padding:16px;border-left:4px solid #22c55e;">
                                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">
                                     <span style="font-size:18px;">💵</span>
-                                    <span style="font-size:12px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;">Cash</span>
+                                    <span style="font-size:12px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;"><?php echo t('label_cash'); ?></span>
                                 </div>
                                 <div id="coll-cash-amount" style="font-size:18px;font-weight:800;color:#111;margin-bottom:10px;">
                                     RWF <?php echo abbr_money($today_cash); ?>
@@ -550,7 +550,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                             <div style="background:#eff6ff;border-radius:12px;padding:16px;border-left:4px solid #3b82f6;">
                                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">
                                     <span style="font-size:18px;">📱</span>
-                                    <span style="font-size:12px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.5px;">Momo</span>
+                                    <span style="font-size:12px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:.5px;">Momo</span><!-- keep brand name unchanged -->
                                 </div>
                                 <div id="coll-momo-amount" style="font-size:18px;font-weight:800;color:#111;margin-bottom:10px;">
                                     RWF <?php echo abbr_money($today_momo); ?>
@@ -565,7 +565,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                             <div style="background:#fffbeb;border-radius:12px;padding:16px;border-left:4px solid #f59e0b;">
                                 <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">
                                     <span style="font-size:18px;">🔖</span>
-                                    <span style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:.5px;">Loan</span>
+                                    <span style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:.5px;"><?php echo t('label_loan'); ?></span>
                                 </div>
                                 <div id="coll-loan-amount" style="font-size:18px;font-weight:800;color:#111;margin-bottom:10px;">
                                     RWF <?php echo abbr_money($today_loan); ?>
@@ -582,13 +582,13 @@ if (($today_sales['total'] ?? 0) == 0) {
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <span style="font-size:16px;">⚠️</span>
                                 <div>
-                                    <div style="font-size:13px;font-weight:600;color:#374151;">Total Outstanding Loans</div>
-                                    <div style="font-size:11px;color:var(--secondary);">All unpaid client balances</div>
+                                    <div style="font-size:13px;font-weight:600;color:#374151;"><?php echo t('dash_outstanding_loans'); ?></div>
+                                    <div style="font-size:11px;color:var(--secondary);"><?php echo t('dash_unpaid_balances'); ?></div>
                                 </div>
                             </div>
                             <div style="text-align:right;">
                                 <div id="coll-outstanding-amount" style="font-size:18px;font-weight:800;color:#f59e0b;">RWF <?php echo abbr_money($outstanding_loans); ?></div>
-                                <a href="loans.php" style="font-size:11px;color:var(--primary);text-decoration:none;">View details →</a>
+                                <a href="loans.php" style="font-size:11px;color:var(--primary);text-decoration:none;"><?php echo t('dash_view_details'); ?></a>
                             </div>
                         </div>
                     </div>
@@ -596,7 +596,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                     <!-- Empty state -->
                     <div id="coll-empty" style="text-align:center;padding:32px 0;color:var(--secondary);display:<?php echo $today_pay_total > 0 ? 'none' : 'block'; ?>">
                         <div style="font-size:32px;margin-bottom:8px;">💳</div>
-                        <div style="font-size:13px;">No sales recorded for this period</div>
+                        <div style="font-size:13px;"><?php echo t('dash_no_sales_period'); ?></div>
                         <div id="coll-empty-loans" style="display:<?php echo $outstanding_loans > 0 ? 'inline-flex' : 'none'; ?>;margin-top:16px;padding:12px 16px;background:#fffbeb;border-radius:10px;border:1px solid #fde68a;gap:12px;align-items:center;">
                             <span style="font-size:13px;color:#92400e;">⚠️ Outstanding Loans:</span>
                             <strong id="coll-empty-outstanding" style="color:#f59e0b;">RWF <?php echo abbr_money($outstanding_loans); ?></strong>
@@ -689,8 +689,8 @@ if (($today_sales['total'] ?? 0) == 0) {
                 <!-- Sales Chart -->
                 <div class="chart-container">
                     <h3>
-                        Sales Trend (Last 7 Days)
-                        <small>Bulk vs Retail</small>
+                        <?php echo t('dash_sales_trend'); ?>
+                        <small><?php echo t('dash_bulk_vs_retail'); ?></small>
                     </h3>
                     <div class="chart-wrapper" style="height: 300px;">
                         <canvas id="salesChart"></canvas>
@@ -700,42 +700,42 @@ if (($today_sales['total'] ?? 0) == 0) {
                 <!-- Quick Actions -->
                 <div>
                     <div class="chart-container" style="margin-bottom: 20px;">
-                        <h3>Quick Actions</h3>
+                        <h3><?php echo t('dash_quick_actions'); ?></h3>
                         <div class="quick-actions">
-                            <a href="sales.php" class="quick-action-btn"><span>💰</span>New Sale</a>
-                            <a href="purchases.php" class="quick-action-btn"><span>📦</span>Purchase</a>
-                            <a href="stock.php" class="quick-action-btn"><span>🔄</span>Move Stock</a>
-                            <a href="products.php" class="quick-action-btn"><span>🏷️</span>Add Product</a>
+                            <a href="sales.php" class="quick-action-btn"><span>💰</span><?php echo t('dash_new_sale'); ?></a>
+                            <a href="purchases.php" class="quick-action-btn"><span>📦</span><?php echo t('dash_purchase'); ?></a>
+                            <a href="stock.php" class="quick-action-btn"><span>🔄</span><?php echo t('dash_move_stock'); ?></a>
+                            <a href="products.php" class="quick-action-btn"><span>🏷️</span><?php echo t('dash_add_product'); ?></a>
                         </div>
                     </div>
                     
                     <!-- Stock Health -->
                     <div class="chart-container">
-                        <h3>Stock Health</h3>
+                        <h3><?php echo t('dash_stock_health'); ?></h3>
                         <?php if ($low_stock_count > 0): ?>
                             <?php while($item = mysqli_fetch_assoc($low_stock_query)): ?>
                             <div class="low-stock-item">
                                 <div>
                                     <div class="low-stock-name"><?php echo htmlspecialchars($item['name']); ?></div>
-                                    <div class="low-stock-sub">Reorder at <?php echo $item['reorder_level']; ?></div>
+                                    <div class="low-stock-sub"><?php echo t('dash_reorder_at'); ?> <?php echo $item['reorder_level']; ?></div>
                                 </div>
-                                <span class="low-stock-badge"><?php echo $item['quantity']; ?> left</span>
+                                <span class="low-stock-badge"><?php echo $item['quantity']; ?> <?php echo t('dash_left'); ?></span>
                             </div>
                             <?php endwhile; ?>
                         <?php else: ?>
                             <div style="text-align:center;padding:24px 0;color:var(--success);">
                                 <div style="font-size:36px;">✓</div>
-                                <div style="font-size:13px;color:var(--secondary);margin-top:6px;">All products well stocked</div>
+                                <div style="font-size:13px;color:var(--secondary);margin-top:6px;"><?php echo t('dash_all_stocked'); ?></div>
                             </div>
                         <?php endif; ?>
                         <div class="mini-stats">
                             <div class="mini-stat">
                                 <div class="mini-stat-value"><?php echo number_format($movements['total_movements'] ?? 0); ?></div>
-                                <div class="mini-stat-label">Movements this week</div>
+                                <div class="mini-stat-label"><?php echo t('dash_movements_week'); ?></div>
                             </div>
                             <div class="mini-stat">
                                 <div class="mini-stat-value" style="color:var(--success);"><?php echo number_format($total_suppliers); ?></div>
-                                <div class="mini-stat-label">Active Suppliers</div>
+                                <div class="mini-stat-label"><?php echo t('dash_active_suppliers'); ?></div>
                             </div>
                         </div>
                     </div>
@@ -745,16 +745,16 @@ if (($today_sales['total'] ?? 0) == 0) {
             <!-- Top Products -->
             <div style="margin-bottom:24px;">
                 <div class="chart-container">
-                    <h3>Top Selling Products</h3>
+                    <h3><?php echo t('dash_top_products'); ?></h3>
                     <div style="overflow-x:auto;">
                         <table class="top-table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th>Category</th>
-                                    <th style="text-align:center;">Bulk</th>
-                                    <th style="text-align:center;">Retail</th>
-                                    <th style="text-align:right;">Revenue</th>
+                                    <th><?php echo t('label_product'); ?></th>
+                                    <th><?php echo t('label_category'); ?></th>
+                                    <th style="text-align:center;"><?php echo t('label_bulk'); ?></th>
+                                    <th style="text-align:center;"><?php echo t('label_retail'); ?></th>
+                                    <th style="text-align:right;"><?php echo t('label_revenue'); ?></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -769,7 +769,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                                     </tr>
                                     <?php endwhile; ?>
                                 <?php else: ?>
-                                    <tr><td colspan="5" style="padding:30px;text-align:center;color:var(--secondary);">No sales data yet</td></tr>
+                                    <tr><td colspan="5" style="padding:30px;text-align:center;color:var(--secondary);"><?php echo t('dash_no_sales_data'); ?></td></tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
@@ -781,10 +781,10 @@ if (($today_sales['total'] ?? 0) == 0) {
             <!-- Business Performance Summary -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px;">
                 <div class="perf-box">
-                    <h4>Performance Summary</h4>
+                    <h4><?php echo t('dash_performance'); ?></h4>
                     <div class="perf-grid">
                         <div class="perf-item">
-                            <div class="perf-item-label">Avg. Daily Sales</div>
+                            <div class="perf-item-label"><?php echo t('dash_avg_daily_sales'); ?></div>
                             <div class="perf-item-value">RWF <?php
                                 $avg_daily = mysqli_fetch_assoc(mysqli_query($conn, "
                                     SELECT AVG(daily_total) as avg_sales FROM (
@@ -796,7 +796,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                                 echo number_format($avg_daily['avg_sales'] ?? 0, 0); ?></div>
                         </div>
                         <div class="perf-item">
-                            <div class="perf-item-label">Best Day</div>
+                            <div class="perf-item-label"><?php echo t('dash_best_day'); ?></div>
                             <div class="perf-item-value"><?php
                                 $best_day = mysqli_fetch_assoc(mysqli_query($conn, "
                                     SELECT DAYNAME(sale_date) as day_name, COUNT(*) as c FROM (
@@ -805,13 +805,13 @@ if (($today_sales['total'] ?? 0) == 0) {
                                 echo $best_day['day_name'] ?? 'N/A'; ?></div>
                         </div>
                         <div class="perf-item">
-                            <div class="perf-item-label">Total Transactions</div>
+                            <div class="perf-item-label"><?php echo t('dash_total_trans'); ?></div>
                             <div class="perf-item-value"><?php
                                 $total_trans = mysqli_fetch_assoc(mysqli_query($conn, "SELECT (SELECT COUNT(*) FROM sales_bulk)+(SELECT COUNT(*) FROM sales_retail) as total"));
                                 echo number_format($total_trans['total'] ?? 0); ?></div>
                         </div>
                         <div class="perf-item">
-                            <div class="perf-item-label">Stock Turnover</div>
+                            <div class="perf-item-label"><?php echo t('dash_stock_turnover'); ?></div>
                             <div class="perf-item-value"><?php
                                 $turnover = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(sb.quantity),0)+COALESCE(SUM(sr.pieces_sold),0) as sold, COALESCE((SELECT SUM(quantity) FROM stock),1) as stk FROM products p LEFT JOIN sales_bulk sb ON p.id=sb.product_id LEFT JOIN sales_retail sr ON p.id=sr.product_id"));
                                 echo number_format($turnover['stk'] > 0 ? ($turnover['sold']/$turnover['stk'])*100 : 0, 0) . '%'; ?></div>
@@ -820,7 +820,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                 </div>
 
                 <div class="perf-box">
-                    <h4>Quick Insights</h4>
+                    <h4><?php echo t('dash_quick_insights'); ?></h4>
                     <?php
                     $total_bulk_all   = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0) as t FROM sales_bulk WHERE has_loan = 0"))['t'] ?? 0;
                     $total_retail_all = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(total_amount),0) as t FROM sales_retail WHERE has_loan = 0"))['t'] ?? 0;
@@ -830,19 +830,19 @@ if (($today_sales['total'] ?? 0) == 0) {
                     $avg_items = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(items) as a FROM (SELECT quantity as items FROM sales_bulk UNION ALL SELECT pieces_sold FROM sales_retail) as s"));
                     ?>
                     <div class="insight-row">
-                        <span class="insight-label">Bulk vs Retail</span>
+                        <span class="insight-label"><?php echo t('dash_bulk_vs_retail'); ?></span>
                         <span class="insight-value"><?php echo $total_all > 0 ? number_format(($total_bulk_all/$total_all)*100,0).'% / '.number_format(($total_retail_all/$total_all)*100,0).'%' : 'N/A'; ?></span>
                     </div>
                     <div class="insight-row">
-                        <span class="insight-label">Avg. Transaction</span>
+                        <span class="insight-label"><?php echo t('dash_avg_transaction'); ?></span>
                         <span class="insight-value">RWF <?php echo number_format($avg_trans['a'] ?? 0, 0); ?></span>
                     </div>
                     <div class="insight-row">
-                        <span class="insight-label">Peak Hour</span>
+                        <span class="insight-label"><?php echo t('dash_peak_hour'); ?></span>
                         <span class="insight-value"><?php echo $peak_hour ? date('g A', strtotime($peak_hour['h'].':00')) : 'N/A'; ?></span>
                     </div>
                     <div class="insight-row">
-                        <span class="insight-label">Items per Sale</span>
+                        <span class="insight-label"><?php echo t('dash_items_per_sale'); ?></span>
                         <span class="insight-value"><?php echo number_format($avg_items['a'] ?? 0, 1); ?></span>
                     </div>
                 </div>
@@ -893,7 +893,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                         labels: dates,
                         datasets: [
                             {
-                                label: 'Bulk Sales',
+                                label: '<?php echo addslashes(t('dash_bulk_sales_lbl')); ?>',
                                 data: bulkSales,
                                 borderColor: 'rgba(102, 126, 234, 1)',
                                 backgroundColor: 'rgba(102, 126, 234, 0.1)',
@@ -903,7 +903,7 @@ if (($today_sales['total'] ?? 0) == 0) {
                                 pointBackgroundColor: 'rgba(102, 126, 234, 1)',
                             },
                             {
-                                label: 'Retail Sales',
+                                label: '<?php echo addslashes(t('dash_retail_sales_lbl')); ?>',
                                 data: retailSales,
                                 borderColor: 'rgba(245, 87, 108, 1)',
                                 backgroundColor: 'rgba(245, 87, 108, 0.1)',

@@ -68,12 +68,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_purchase'])) {
                 mysqli_query($conn, "UPDATE stock SET quantity = quantity + ($qty_diff), pieces_per_package = $pieces_per_qty, package_price = $package_price, retail_price = $retail_price WHERE product_id = $product_id");
             }
 
-            $_SESSION['flash_success'] = "Purchase updated successfully and stock adjusted";
+            $_SESSION['flash_success'] = t('purch_updated_ok');
         } else {
-            $_SESSION['flash_error'] = "Error updating purchase: " . mysqli_error($conn);
+            $_SESSION['flash_error'] = t('purch_updated_err') . ': ' . mysqli_error($conn);
         }
     } else {
-        $_SESSION['flash_error'] = "Purchase not found";
+        $_SESSION['flash_error'] = t('purch_not_found');
     }
 
     header("Location: purchases.php");
@@ -136,7 +136,7 @@ if (!empty($all_rows)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Purchases - Small Stock Management</title>
+    <title><?php echo t('page_purchases'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
         /* ── Page header ──────────────────────────────────────────────────── */
@@ -232,21 +232,21 @@ if (!empty($all_rows)) {
         <div class="main-content">
             <div class="page-header">
                 <div>
-                    <h1>Purchases</h1>
-                    <p class="page-subtitle">Stock purchases &amp; supplier transactions &nbsp;·&nbsp; <?php echo count($all_rows); ?> record<?php echo count($all_rows) != 1 ? 's' : ''; ?></p>
+                    <h1><?php echo t('purch_title'); ?></h1>
+                    <p class="page-subtitle"><?php echo t('purch_subtitle'); ?> &nbsp;·&nbsp; <?php echo count($all_rows); ?> <?php echo count($all_rows) != 1 ? t('purch_records') : t('purch_record'); ?></p>
                 </div>
                 <div class="ph-actions">
                     <form method="GET" class="filter-inline">
                         <input type="date" id="date_from" name="date_from" value="<?php echo htmlspecialchars($date_from); ?>">
                         <span class="filter-sep">–</span>
                         <input type="date" id="date_to" name="date_to" value="<?php echo htmlspecialchars($date_to); ?>">
-                        <button type="submit" class="btn btn-sm btn-secondary">Filter</button>
+                        <button type="submit" class="btn btn-sm btn-secondary"><?php echo t('btn_filter'); ?></button>
                         <?php if ($date_from || $date_to): ?>
-                            <a href="purchases.php" class="btn-clear">✕ Clear</a>
+                            <a href="purchases.php" class="btn-clear">✕ <?php echo t('btn_clear'); ?></a>
                         <?php endif; ?>
                     </form>
-                    <a href="new-purchase.php" class="btn btn-primary">+ New Purchase</a>
-                    <a href="suppliers.php" class="btn btn-secondary">Suppliers</a>
+                    <a href="new-purchase.php" class="btn btn-primary"><?php echo t('purch_btn_new'); ?></a>
+                    <a href="suppliers.php" class="btn btn-secondary"><?php echo t('purch_btn_suppliers'); ?></a>
                 </div>
             </div>
             
@@ -261,12 +261,12 @@ if (!empty($all_rows)) {
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
                 <input type="text" id="txtSearchPurchases"
                     style="flex:1;min-width:200px;max-width:340px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:var(--radius);font-size:13px;background:var(--gray-100);"
-                    placeholder="Search product, supplier…"
+                    placeholder="<?php echo t('purch_search_ph'); ?>"
                     oninput="searchPurchases(this.value)">
                 <div id="date-group-filters" class="date-jump-bar" style="display:none;margin-bottom:0;">
-                    <span class="date-jump-label">Jump to:</span>
+                    <span class="date-jump-label"><?php echo t('purch_jump_to'); ?></span>
                     <select id="date-group-select" class="date-jump-select">
-                        <option value="all">All dates</option>
+                        <option value="all"><?php echo t('purch_all_dates'); ?></option>
                     </select>
                 </div>
             </div>
@@ -275,12 +275,12 @@ if (!empty($all_rows)) {
                 <table class="table" id="tblPurchases">
                     <thead>
                         <tr>
-                            <th>Product</th>
-                            <th>Qty</th>
-                            <th>Cost Price</th>
-                            <th>Packaging &amp; Prices</th>
-                            <th>Supplier</th>
-                            <th>Actions</th>
+                            <th><?php echo t('purch_col_product'); ?></th>
+                            <th><?php echo t('purch_col_qty'); ?></th>
+                            <th><?php echo t('purch_col_cost'); ?></th>
+                            <th><?php echo t('purch_col_packaging'); ?></th>
+                            <th><?php echo t('purch_col_supplier'); ?></th>
+                            <th><?php echo t('purch_col_actions'); ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -307,7 +307,7 @@ if (!empty($all_rows)) {
                                 if ($current_date !== ''):
                         ?>
                         <tr class="date-subtotal" data-group="<?php echo $group_index; ?>">
-                            <td colspan="3"><strong>Subtotal</strong></td>
+                            <td colspan="3"><strong><?php echo t('purch_subtotal'); ?></strong></td>
                             <td colspan="3"><strong>RWF <?php echo number_format($day_total, 0); ?></strong></td>
                         </tr>
                         <?php
@@ -358,8 +358,8 @@ if (!empty($all_rows)) {
                                     data-package-price="<?php echo $row['package_price']; ?>"
                                     data-retail-price="<?php echo $row['retail_price']; ?>"
                                     data-date="<?php echo date('Y-m-d', strtotime($row['purchase_date'])); ?>"
-                                    onclick="openEditPurchase(this)">Edit</button>
-                                <a href="new-purchase.php?repeat=<?= $row['id'] ?>" class="btn btn-sm btn-primary" style="margin-left:4px;">Repeat</a>
+                                    onclick="openEditPurchase(this)"><?php echo t('purch_btn_edit'); ?></button>
+                                <a href="new-purchase.php?repeat=<?= $row['id'] ?>" class="btn btn-sm btn-primary" style="margin-left:4px;"><?php echo t('purch_btn_repeat'); ?></a>
                             </td>
                         </tr>
                         <?php
@@ -371,14 +371,14 @@ if (!empty($all_rows)) {
                         if ($current_date !== ''):
                         ?>
                         <tr class="date-subtotal" data-group="<?php echo $group_index; ?>" <?php if ($group_index > 0): ?>style="display:none"<?php endif; ?>>
-                            <td colspan="3"><strong>Subtotal</strong></td>
+                            <td colspan="3"><strong><?php echo t('purch_subtotal'); ?></strong></td>
                             <td colspan="3"><strong>RWF <?php echo number_format($day_total, 0); ?></strong></td>
                         </tr>
                         <?php endif; ?>
                     </tbody>
                     <tfoot>
                         <tr class="grand-total">
-                            <td colspan="3"><strong>Grand Total</strong></td>
+                            <td colspan="3"><strong><?php echo t('purch_grand_total'); ?></strong></td>
                             <td colspan="3"><strong>RWF <?php echo number_format($grand_total, 0); ?></strong></td>
                         </tr>
                     </tfoot>
@@ -391,19 +391,19 @@ if (!empty($all_rows)) {
     <div id="editPurchaseModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('editPurchaseModal')">&times;</span>
-            <h2>Edit Purchase</h2>
+            <h2><?php echo t('purch_edit_modal'); ?></h2>
 
             <form method="POST" action="" id="editPurchaseForm">
                 <input type="hidden" id="edit_purchase_id" name="purchase_id">
                 <div class="form-group">
-                    <label for="edit_purchase_date">Purchase Date*</label>
+                    <label for="edit_purchase_date"><?php echo t('purch_field_date'); ?></label>
                     <input type="date" id="edit_purchase_date" name="purchase_date" required>
                 </div>
                 <div class="form-group">
-                    <label for="edit_product_id">Product*</label>
+                    <label for="edit_product_id"><?php echo t('purch_field_product'); ?></label>
                     <div class="searchable-select" id="editProductSearchable">
                         <input type="hidden" id="edit_product_id" name="product_id" required>
-                        <input type="text" class="searchable-select-input" id="edit_product_search" placeholder="Search product..." autocomplete="off">
+                        <input type="text" class="searchable-select-input" id="edit_product_search" placeholder="<?php echo t('purch_search_product'); ?>" autocomplete="off">
                         <div class="searchable-select-dropdown" id="edit_product_dropdown">
                             <?php foreach($products_arr as $row): ?>
                                 <div class="searchable-select-option" data-value="<?php echo $row['id']; ?>">
@@ -414,36 +414,36 @@ if (!empty($all_rows)) {
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="edit_quantity">Quantity (Number of packages)*</label>
+                    <label for="edit_quantity"><?php echo t('purch_field_qty'); ?></label>
                     <input type="text" id="edit_quantity" name="quantity" required min="1">
                 </div>
                 <div class="form-group">
-                    <label for="edit_pieces_per_qty">Pieces per Quantity(Qty Imwe Ingana ite?)*</label>
+                    <label for="edit_pieces_per_qty"><?php echo t('purch_field_pieces'); ?></label>
                     <input type="text" id="edit_pieces_per_qty" name="pieces_per_qty" required min="1">
                 </div>
                 <div class="form-group">
-                    <label for="edit_cost_price">Cost Price (per package)(Uko waranguye)*</label>
+                    <label for="edit_cost_price"><?php echo t('purch_field_cost'); ?></label>
                     <input type="text" id="edit_cost_price" name="cost_price" step="0.01" required>
                 </div>
                 <div class="form-group">
-                    <label for="edit_package_price">Kuranguza Price (Uko Uzaranguza)*</label>
+                    <label for="edit_package_price"><?php echo t('purch_field_pkg_price'); ?></label>
                     <input type="text" id="edit_package_price" name="package_price" step="0.01" required>
                 </div>
                 <div class="form-group">
-                    <label for="edit_retail_price">Detaye Price (per piece)*</label>
+                    <label for="edit_retail_price"><?php echo t('purch_field_retail'); ?></label>
                     <input type="text" id="edit_retail_price" name="retail_price" step="0.01" required>
                 </div>
                 <div class="form-group">
-                    <label for="edit_supplier_id">Supplier</label>
+                    <label for="edit_supplier_id"><?php echo t('purch_field_supplier'); ?></label>
                     <select id="edit_supplier_id" name="supplier_id">
-                        <option value="">Select Supplier</option>
+                        <option value=""><?php echo t('purch_select_supplier'); ?></option>
                         <?php foreach($suppliers_arr as $row): ?>
                             <option value="<?php echo $row['id']; ?>"><?php echo htmlspecialchars($row['name']); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
 
-                <button type="submit" name="edit_purchase" class="btn btn-primary">Update Purchase</button>
+                <button type="submit" name="edit_purchase" class="btn btn-primary"><?php echo t('purch_btn_update'); ?></button>
             </form>
         </div>
     </div>
@@ -735,7 +735,7 @@ if (!empty($all_rows)) {
             hidden.value = '1';
             this.appendChild(hidden);
             btn.disabled = true;
-            btn.textContent = 'Updating...';
+            btn.textContent = '<?php echo addslashes(t("purch_updating")); ?>';
         });
     </script>
 </body>

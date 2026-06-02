@@ -112,7 +112,7 @@ if ($date_from || $date_to || $giver_filter) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boaster - Contributions Register</title>
+    <title><?php echo t('page_topup'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
         /* Additional styles specific to boaster page */
@@ -230,8 +230,8 @@ if ($date_from || $date_to || $giver_filter) {
     <div class="main-content">
 
         <div class="header-actions">
-            <h1>📋 Boaster Register</h1>
-            <button onclick="openModal('addBoasterModal')" class="btn btn-primary">+ New Entry</button>
+            <h1><?php echo t('topup_title'); ?></h1>
+            <button onclick="openModal('addBoasterModal')" class="btn btn-primary"><?php echo t('topup_btn_add'); ?></button>
         </div>
 
         <!-- Summary Cards -->

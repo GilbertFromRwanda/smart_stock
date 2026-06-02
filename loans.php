@@ -325,7 +325,7 @@ if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
             WHERE lc.id = $del_client_id
         ");
 
-        if ($ok) { mysqli_commit($conn); $_SESSION['flash_success'] = "Loan deleted."; }
+        if ($ok) { mysqli_commit($conn); $_SESSION['flash_success'] = t('loan_no_records'); }
         else      { mysqli_rollback($conn); $_SESSION['flash_error'] = "Could not delete loan."; }
     }
     header("Location: loans.php"); exit;
@@ -386,7 +386,7 @@ $stats_outstanding = $stats['total_amount'] - $stats['total_paid'];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Loans</title>
+    <title><?php echo t('page_loans'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/loans.css">
 </head>
@@ -397,7 +397,7 @@ $stats_outstanding = $stats['total_amount'] - $stats['total_paid'];
 
         <!-- Header -->
         <div class="loans-header">
-            <h1>Loans</h1>
+            <h1><?php echo t('loan_title'); ?></h1>
             <div style="display:flex;gap:10px;">
                 <?php if ($stats_outstanding > 0): ?>
                 <button onclick="openGlobalLoanPay()" class="btn btn-secondary"

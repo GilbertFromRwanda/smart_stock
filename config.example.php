@@ -99,11 +99,7 @@ function sub_validate_key(string $key): ?DateTimeImmutable {
     $expected = strtoupper(substr(
         hash_hmac('sha256', $ymd . '|' . _sub_machine(), _sub_secret()), 0, 16));
     if (!hash_equals($expected, $given)) return null;
-    $dt = DateTimeImmutable::createFromFormat('Ymd', $ymd);
-    if (!$dt) return null;
-    // Reject keys whose expiry date has already passed
-    if ($dt->setTime(23, 59, 59)->getTimestamp() < time()) return null;
-    return $dt;
+    return DateTimeImmutable::createFromFormat('Ymd', $ymd) ?: null;
 }
 
 // Compute the row signature that binds a license key to its expiry date.

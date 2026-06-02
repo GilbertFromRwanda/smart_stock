@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_expense'])) {
     } else {
         $ins = mysqli_query($conn, "INSERT INTO expenses (description, category, amount, expense_date) VALUES ('$description','$category','$amount','$expense_date')");
         if ($is_ajax) { header('Content-Type: application/json'); echo json_encode($ins ? ['success' => true] : ['success' => false, 'message' => mysqli_error($conn)]); exit; }
-        $_SESSION['flash_success'] = $ins ? "Expense added." : "Error: " . mysqli_error($conn);
+        $_SESSION['flash_success'] = $ins ? t('exp_added_ok') : "Error: " . mysqli_error($conn);
     }
     header("Location: expenses.php"); exit;
 }
@@ -36,14 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_expense'])) {
 
     $upd = mysqli_query($conn, "UPDATE expenses SET description='$description', category='$category', amount='$amount', expense_date='$expense_date' WHERE id=$id");
     if ($is_ajax) { header('Content-Type: application/json'); echo json_encode($upd ? ['success' => true] : ['success' => false, 'message' => mysqli_error($conn)]); exit; }
-    $_SESSION['flash_success'] = $upd ? "Expense updated." : "Error: " . mysqli_error($conn);
+    $_SESSION['flash_success'] = $upd ? t('exp_updated_ok') : "Error: " . mysqli_error($conn);
     header("Location: expenses.php"); exit;
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     mysqli_query($conn, "DELETE FROM expenses WHERE id=" . (int)$_GET['delete']);
-    $_SESSION['flash_success'] = "Expense deleted.";
+    $_SESSION['flash_success'] = t('exp_deleted_ok');
     header("Location: expenses.php"); exit;
 }
 
@@ -77,7 +77,7 @@ $stats = mysqli_fetch_assoc(mysqli_query($conn, "
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Expenses</title>
+    <title><?php echo t('page_expenses'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
         .exp-cards {

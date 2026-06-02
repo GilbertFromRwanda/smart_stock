@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_bulk_sale'])) {
             mysqli_query($conn, "DELETE FROM loans WHERE product_id={$row['product_id']} AND client='$client_e' AND amount={$row['loan_amount']} AND loan_date='{$row['sale_date']}' LIMIT 1");
         }
         mysqli_query($conn, "DELETE FROM sales_bulk WHERE id=$id");
-        $_SESSION['flash_success'] = "Bulk sale deleted and stock restored.";
+        $_SESSION['flash_success'] = t('sales_bulk_deleted');
     }
     header("Location: sales.php?tab=bulk"); exit;
 }
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_bulk_sale'])) {
             mysqli_query($conn, "UPDATE stock SET quantity = quantity + $qty_diff WHERE product_id = {$old['product_id']}");
         }
         mysqli_query($conn, "UPDATE sales_bulk SET quantity=$new_qty, package_price=$new_price, total_amount=$total_amount, customer_name='$customer_name', cash_amount=$cash_amount, momo_amount=$momo_amount, loan_amount=$loan_amount, sale_date='$sale_date' WHERE id=$id");
-        $_SESSION['flash_success'] = "Bulk sale updated.";
+        $_SESSION['flash_success'] = t('sales_bulk_updated');
     }
     header("Location: sales.php?tab=bulk"); exit;
 }
@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_retail_sale']))
             mysqli_query($conn, "DELETE FROM loans WHERE product_id={$row['product_id']} AND client='$client_e' AND amount={$row['loan_amount']} AND loan_date='{$row['sale_date']}' LIMIT 1");
         }
         mysqli_query($conn, "DELETE FROM sales_retail WHERE id=$id");
-        $_SESSION['flash_success'] = "Retail sale deleted and stock restored.";
+        $_SESSION['flash_success'] = t('sales_retail_deleted');
     }
     header("Location: sales.php?tab=retail"); exit;
 }
@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_retail_sale'])) {
             mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity + $qty_diff WHERE product_id = {$old['product_id']}");
         }
         mysqli_query($conn, "UPDATE sales_retail SET pieces_sold=$new_qty, retail_price=$new_price, total_amount=$total_amount, customer_name='$customer_name', cash_amount=$cash_amount, momo_amount=$momo_amount, loan_amount=$loan_amount, sale_date='$sale_date' WHERE id=$id");
-        $_SESSION['flash_success'] = "Retail sale updated.";
+        $_SESSION['flash_success'] = t('sales_retail_updated');
     }
     header("Location: sales.php?tab=retail"); exit;
 }
@@ -445,7 +445,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sales - Small Stock Management</title>
+    <title><?php echo t('page_sales'); ?> - Smart Stock</title>
         <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/sales.css">
     <style>
@@ -578,7 +578,7 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
         <div class="main-content">
             <div class="page-header">
                 <div>
-                    <h1>Sales</h1>
+                    <h1><?php echo t('sales_title'); ?></h1>
                     <p class="page-subtitle">Record &amp; review bulk and retail transactions</p>
                 </div>
                 <div class="ph-actions">

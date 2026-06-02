@@ -15,9 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_product'])) {
 
     if (mysqli_query($conn, "INSERT INTO products (name, category, reorder_level, unit_measure, unit_price)
                               VALUES ('$name','$category','$reorder_level','$unit_measure','$unit_price')")) {
-        $_SESSION['flash_success'] = "Product added successfully";
+        $_SESSION['flash_success'] = t('prod_added_ok');
     } else {
-        $_SESSION['flash_error'] = "Error adding product: " . mysqli_error($conn);
+        $_SESSION['flash_error'] = t('prod_added_err') . ': ' . mysqli_error($conn);
     }
     header("Location: products.php");
     exit;
@@ -37,9 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_product'])) {
 
     if (mysqli_query($conn, "UPDATE products SET name='$name', category='$category', reorder_level='$reorder_level',
                               unit_measure='$unit_measure', unit_price='$unit_price' WHERE id=$id")) {
-        $_SESSION['flash_success'] = "Product updated successfully";
+        $_SESSION['flash_success'] = t('prod_updated_ok');
     } else {
-        $_SESSION['flash_error'] = "Error updating product: " . mysqli_error($conn);
+        $_SESSION['flash_error'] = t('prod_updated_err') . ': ' . mysqli_error($conn);
     }
     header("Location: products.php");
     exit;
@@ -89,14 +89,14 @@ function build_rows($result, $offset) {
             <td>RWF " . number_format($row['unit_price'], 0) . "</td>
             <td style='white-space:nowrap;'>
                 <a href='#' class='btn btn-sm btn-warning'
-                    onclick=\"editProduct({$row['id']},'$js_name','$js_cat',{$row['reorder_level']},'$js_um',{$row['unit_price']})\">Edit</a>
-                <a href='products.php?delete={$row['id']}' onclick=\"return confirm('Delete this product?')\"
-                    class='btn btn-sm btn-danger'>Delete</a>
+                    onclick=\"editProduct({$row['id']},'$js_name','$js_cat',{$row['reorder_level']},'$js_um',{$row['unit_price']})\">". t('prod_btn_edit') ."</a>
+                <a href='products.php?delete={$row['id']}' onclick=\"return confirm('". addslashes(t('prod_delete_confirm')) ."')\"
+                    class='btn btn-sm btn-danger'>". t('prod_btn_delete') ."</a>
             </td>
         </tr>";
         $i++;
     }
-    if ($html === '') $html = "<tr><td colspan='7' style='text-align:center;color:var(--secondary);padding:40px;font-size:14px;'>No products found.</td></tr>";
+    if ($html === '') $html = "<tr><td colspan='7' style='text-align:center;color:var(--secondary);padding:40px;font-size:14px;'>" . t('prod_none_found') . "</td></tr>";
     return $html;
 }
 
@@ -130,7 +130,7 @@ if (isset($_GET['ajax'])) {
     echo json_encode([
         'rows'       => build_rows($result, $offset),
         'pagination' => build_pagination($page, $total_pages),
-        'info'       => "Showing {$from}–{$to} of " . number_format($total) . " products",
+        'info'       => t('label_search') . ": {$from}–{$to} / " . number_format($total),
     ]);
     exit;
 }
@@ -140,7 +140,7 @@ if (isset($_GET['ajax'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Products - Small Stock Management</title>
+    <title><?php echo t('page_products'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <style>
         /* Page header */
@@ -204,10 +204,10 @@ if (isset($_GET['ajax'])) {
     <div class="main-content">
         <div class="page-header">
             <div>
-                <h1>Products</h1>
-                <p class="page-subtitle">All inventory products &nbsp;·&nbsp; <?php echo number_format($total); ?> total</p>
+                <h1><?php echo t('prod_title'); ?></h1>
+                <p class="page-subtitle"><?php echo t('prod_subtitle'); ?> &nbsp;·&nbsp; <?php echo number_format($total); ?> <?php echo t('label_total'); ?></p>
             </div>
-            <button onclick="openModal('addProductModal')" class="btn btn-primary">+ Add Product</button>
+            <button onclick="openModal('addProductModal')" class="btn btn-primary"><?php echo t('prod_btn_add'); ?></button>
         </div>
 
         <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -216,7 +216,7 @@ if (isset($_GET['ajax'])) {
         <div class="prod-card">
             <div class="products-toolbar">
                 <div class="search-wrap">
-                    <input type="text" id="productSearch" placeholder="Search name or category…"
+                    <input type="text" id="productSearch" placeholder="<?php echo t('prod_search_ph'); ?>"
                         value="<?php echo htmlspecialchars($search); ?>" autocomplete="off">
                     <button class="search-clear" onclick="clearSearch()" title="Clear">&times;</button>
                 </div>
@@ -226,8 +226,13 @@ if (isset($_GET['ajax'])) {
                 <table class="table" id="tblProducts">
                     <thead>
                         <tr>
-                            <th>#</th><th>Name</th><th>Category</th>
-                            <th>Reorder Level</th><th>Unit</th><th>Unit Price</th><th>Actions</th>
+                            <th><?php echo t('prod_col_num'); ?></th>
+                            <th><?php echo t('prod_col_name'); ?></th>
+                            <th><?php echo t('prod_col_category'); ?></th>
+                            <th><?php echo t('prod_col_reorder'); ?></th>
+                            <th><?php echo t('prod_col_unit'); ?></th>
+                            <th><?php echo t('prod_col_price'); ?></th>
+                            <th><?php echo t('prod_col_actions'); ?></th>
                         </tr>
                     </thead>
                     <tbody id="productsBody">
@@ -243,7 +248,8 @@ if (isset($_GET['ajax'])) {
                 <div class="pagination-info" id="productsInfo">
                     <?php
                     $from = $total > 0 ? $offset + 1 : 0;
-                    echo "Showing {$from}–" . min($offset + $per_page, $total) . " of " . number_format($total) . " products";
+                    $to   = min($offset + $per_page, $total);
+                    echo "{$from}–{$to} / " . number_format($total) . " " . t('prod_title');
                     ?>
                 </div>
             </div>
@@ -255,14 +261,14 @@ if (isset($_GET['ajax'])) {
 <div id="addProductModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="closeModal('addProductModal')">&times;</span>
-        <h2>Add New Product</h2>
+        <h2><?php echo t('prod_add_modal'); ?></h2>
         <form method="POST">
-            <div class="form-group"><label>Product Name*</label><input type="text" name="name" required></div>
-            <div class="form-group"><label>Category</label><input type="text" name="category"></div>
-            <div class="form-group"><label>Reorder Level*</label><input type="number" name="reorder_level" value="2" required></div>
-            <div class="form-group"><label>Unit Measure*</label><input type="text" name="unit_measure" value="Box" required></div>
-            <div class="form-group"><label>Unit Price (RWF)*</label><input type="number" name="unit_price" step="0.01" required></div>
-            <button type="submit" name="add_product" class="btn btn-primary">Add Product</button>
+            <div class="form-group"><label><?php echo t('prod_field_name'); ?></label><input type="text" name="name" required></div>
+            <div class="form-group"><label><?php echo t('prod_field_cat'); ?></label><input type="text" name="category"></div>
+            <div class="form-group"><label><?php echo t('prod_field_reorder'); ?></label><input type="number" name="reorder_level" value="2" required></div>
+            <div class="form-group"><label><?php echo t('prod_field_unit'); ?></label><input type="text" name="unit_measure" value="Box" required></div>
+            <div class="form-group"><label><?php echo t('prod_field_price'); ?></label><input type="number" name="unit_price" step="0.01" required></div>
+            <button type="submit" name="add_product" class="btn btn-primary"><?php echo t('prod_btn_add_modal'); ?></button>
         </form>
     </div>
 </div>
@@ -271,15 +277,15 @@ if (isset($_GET['ajax'])) {
 <div id="editProductModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="closeModal('editProductModal')">&times;</span>
-        <h2>Edit Product</h2>
+        <h2><?php echo t('prod_edit_modal'); ?></h2>
         <form method="POST">
             <input type="hidden" id="edit_id" name="edit_id">
-            <div class="form-group"><label>Product Name*</label><input type="text" id="edit_name" name="edit_name" required></div>
-            <div class="form-group"><label>Category</label><input type="text" id="edit_category" name="edit_category"></div>
-            <div class="form-group"><label>Reorder Level*</label><input type="number" id="edit_reorder_level" name="edit_reorder_level" required></div>
-            <div class="form-group"><label>Unit Measure*</label><input type="text" id="edit_unit_measure" name="edit_unit_measure" required></div>
-            <div class="form-group"><label>Unit Price (RWF)*</label><input type="number" id="edit_unit_price" name="edit_unit_price" step="0.01" required></div>
-            <button type="submit" name="edit_product" class="btn btn-primary">Update Product</button>
+            <div class="form-group"><label><?php echo t('prod_field_name'); ?></label><input type="text" id="edit_name" name="edit_name" required></div>
+            <div class="form-group"><label><?php echo t('prod_field_cat'); ?></label><input type="text" id="edit_category" name="edit_category"></div>
+            <div class="form-group"><label><?php echo t('prod_field_reorder'); ?></label><input type="number" id="edit_reorder_level" name="edit_reorder_level" required></div>
+            <div class="form-group"><label><?php echo t('prod_field_unit'); ?></label><input type="text" id="edit_unit_measure" name="edit_unit_measure" required></div>
+            <div class="form-group"><label><?php echo t('prod_field_price'); ?></label><input type="number" id="edit_unit_price" name="edit_unit_price" step="0.01" required></div>
+            <button type="submit" name="edit_product" class="btn btn-primary"><?php echo t('prod_btn_update'); ?></button>
         </form>
     </div>
 </div>

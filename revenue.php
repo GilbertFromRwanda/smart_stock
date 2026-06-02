@@ -458,7 +458,7 @@ $today_margin = $today_sales > 0 ? ($today_profit / $today_sales) * 100 : 0;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profit & Revenue Analysis - Small Stock Management</title>
+    <title><?php echo t('page_revenue'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/revenue.css">
    
@@ -468,7 +468,7 @@ $today_margin = $today_sales > 0 ? ($today_profit / $today_sales) * 100 : 0;
         <?php include 'sidebar.php'; ?>
         
         <div class="main-content">
-            <h1>Profit & Revenue Analysis</h1>
+            <h1><?php echo t('rev_title'); ?></h1>
             
             <!-- Current Week Profit Summary -->
             <div class="profit-summary">

@@ -17,9 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_supplier'])) {
               VALUES ('$name', '$contact_person', '$phone', '$email', '$address')";
     
     if (mysqli_query($conn, $query)) {
-        $success = "Supplier added successfully";
+        $success = t('sup_added_ok');
     } else {
-        $error = "Error adding supplier: " . mysqli_error($conn);
+        $error = t('sup_added_ok') . ': ' . mysqli_error($conn);
     }
 }
 
@@ -32,7 +32,7 @@ $suppliers = mysqli_query($conn, "SELECT * FROM suppliers ORDER BY name");
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Suppliers - Small Stock Management</title>
+    <title><?php echo t('page_suppliers'); ?> - Smart Stock</title>
        <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -40,10 +40,10 @@ $suppliers = mysqli_query($conn, "SELECT * FROM suppliers ORDER BY name");
         <?php include 'sidebar.php'; ?>
         
         <div class="main-content">
-            <h1>Supplier Management</h1>
+            <h1><?php echo t('sup_title'); ?></h1>
             
             <div class="action-bar">
-                <button onclick="openModal('addSupplierModal')" class="btn btn-primary">Add New Supplier</button>
+                <button onclick="openModal('addSupplierModal')" class="btn btn-primary"><?php echo t('sup_btn_add'); ?></button>
                 <a href="purchases.php" class="btn btn-secondary">Back to Purchases</a>
             </div>
             

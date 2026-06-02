@@ -189,7 +189,7 @@ if (isset($_GET['edit'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Management - Small Stock Management</title>
+    <title><?php echo t('page_users'); ?> - Smart Stock</title>
     <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/user.css">
 </head>
@@ -199,7 +199,7 @@ if (isset($_GET['edit'])) {
         
         <div class="main-content">
             <div class="dashboard-header">
-                <h1>User Management</h1>
+                <h1><?php echo t('users_title'); ?></h1>
                 <div class="date-display">
                     <strong>📅 <?php echo date('l, F j, Y'); ?></strong>
                 </div>
