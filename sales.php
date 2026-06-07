@@ -102,18 +102,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_sale'])) {
     // Convert sold quantity to top-level packages for stock deduction
     $packages_to_deduct = (int)ceil($quantity / $level_divisor);
 
+    $is_ajax = !empty($_POST['ajax']);
     if (abs($cash_amount + $momo_amount + $loan_amount - $total_amount) > 1) {
-        $_SESSION['flash_error'] = "Payment split (RWF " . number_format($cash_amount + $momo_amount + $loan_amount, 0) . ") must equal total (RWF " . number_format($total_amount, 0) . ").";
-        header("Location: sales.php"); exit;
+        $msg = "Payment split (RWF " . number_format($cash_amount + $momo_amount + $loan_amount, 0) . ") must equal total (RWF " . number_format($total_amount, 0) . ").";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg; header("Location: sales.php"); exit;
     }
     if ($loan_amount > 0 && empty($phone)) {
-        $_SESSION['flash_error'] = "Client phone is required when loan amount is set.";
-        header("Location: sales.php"); exit;
+        $msg = "Client phone is required when loan amount is set.";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg; header("Location: sales.php"); exit;
     }
     $stock = mysqli_fetch_assoc(mysqli_query($conn, "SELECT quantity, pieces_per_package, retail_price FROM stock WHERE product_id = $product_id"));
     if (!$stock || $stock['quantity'] < $packages_to_deduct) {
-        $_SESSION['flash_error'] = "Insufficient stock available";
-        header("Location: sales.php"); exit;
+        $msg = "Insufficient stock available";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg; header("Location: sales.php"); exit;
     }
     $sold_by       = (int)$_SESSION['user_id'];
     $has_loan_flag = $loan_amount > 0 ? 1 : 0;
@@ -165,11 +169,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_sale'])) {
         if ($cash_amount > 0) $parts[] = "Cash: RWF " . number_format($cash_amount, 0);
         if ($momo_amount > 0) $parts[] = "Momo: RWF " . number_format($momo_amount, 0);
         if ($loan_amount > 0) $parts[] = "Loan: RWF " . number_format($loan_amount, 0);
-        $_SESSION['flash_success'] = "Bulk sale recorded — " . implode(", ", $parts);
+        $msg = "Bulk sale recorded — " . implode(", ", $parts);
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>true,'message'=>$msg]); exit; }
+        $_SESSION['flash_success'] = $msg;
         $_SESSION['flash_sale_type'] = 'bulk';
     } else {
         mysqli_rollback($conn);
-        $_SESSION['flash_error'] = "Sale could not be recorded. Please try again.";
+        $msg = "Sale could not be recorded. Please try again.";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg;
     }
     header("Location: sales.php"); exit;
 }
@@ -188,18 +196,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_sale'])) {
     $pieces_to_deduct = $qty_sold * $level_multiplier;   // actual pieces removed from retail_stock
     $total_amount     = $qty_sold * $selling_price;
 
+    $is_ajax = !empty($_POST['ajax']);
     if (abs($cash_amount + $momo_amount + $loan_amount - $total_amount) > 1) {
-        $_SESSION['flash_error'] = "Payment split (RWF " . number_format($cash_amount + $momo_amount + $loan_amount, 0) . ") must equal total (RWF " . number_format($total_amount, 0) . ").";
-        header("Location: sales.php"); exit;
+        $msg = "Payment split (RWF " . number_format($cash_amount + $momo_amount + $loan_amount, 0) . ") must equal total (RWF " . number_format($total_amount, 0) . ").";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg; header("Location: sales.php"); exit;
     }
     if ($loan_amount > 0 && empty($phone)) {
-        $_SESSION['flash_error'] = "Client phone is required when loan amount is set.";
-        header("Location: sales.php"); exit;
+        $msg = "Client phone is required when loan amount is set.";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg; header("Location: sales.php"); exit;
     }
     $retail = mysqli_fetch_assoc(mysqli_query($conn, "SELECT pieces_quantity FROM retail_stock WHERE product_id = $product_id"));
     if (!$retail || $retail['pieces_quantity'] < $pieces_to_deduct) {
-        $_SESSION['flash_error'] = "Insufficient retail stock available";
-        header("Location: sales.php"); exit;
+        $msg = "Insufficient retail stock available";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg; header("Location: sales.php"); exit;
     }
     $sold_by       = (int)$_SESSION['user_id'];
     $has_loan_flag = $loan_amount > 0 ? 1 : 0;
@@ -237,13 +249,46 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_sale'])) {
         if ($cash_amount > 0) $parts[] = "Cash: RWF " . number_format($cash_amount, 0);
         if ($momo_amount > 0) $parts[] = "Momo: RWF " . number_format($momo_amount, 0);
         if ($loan_amount > 0) $parts[] = "Loan: RWF " . number_format($loan_amount, 0);
-        $_SESSION['flash_success'] = "Retail sale recorded — " . implode(", ", $parts);
+        $msg = "Retail sale recorded — " . implode(", ", $parts);
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>true,'message'=>$msg]); exit; }
+        $_SESSION['flash_success'] = $msg;
         $_SESSION['flash_sale_type'] = 'retail';
     } else {
         mysqli_rollback($conn);
-        $_SESSION['flash_error'] = "Sale could not be recorded. Please try again.";
+        $msg = "Sale could not be recorded. Please try again.";
+        if ($is_ajax) { header('Content-Type: application/json'); echo json_encode(['success'=>false,'message'=>$msg]); exit; }
+        $_SESSION['flash_error'] = $msg;
     }
     header("Location: sales.php"); exit;
+}
+
+// ── AJAX: Sales summary cards ─────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['get_sales_summary'])) {
+    $from = mysqli_real_escape_string($conn, $_POST['date_from'] ?? date('Y-m-d'));
+    $to   = mysqli_real_escape_string($conn, $_POST['date_to']   ?? date('Y-m-d'));
+
+    $bulk = mysqli_fetch_assoc(mysqli_query($conn, "
+        SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS total,
+               COALESCE(SUM(cash_amount),0) AS cash, COALESCE(SUM(momo_amount),0) AS momo,
+               COALESCE(SUM(loan_amount),0) AS loan
+        FROM sales_bulk WHERE sale_date BETWEEN '$from' AND '$to' AND refunded = 0"));
+
+    $retail = mysqli_fetch_assoc(mysqli_query($conn, "
+        SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amount),0) AS total,
+               COALESCE(SUM(cash_amount),0) AS cash, COALESCE(SUM(momo_amount),0) AS momo,
+               COALESCE(SUM(loan_amount),0) AS loan
+        FROM sales_retail WHERE sale_date BETWEEN '$from' AND '$to' AND refunded = 0"));
+
+    header('Content-Type: application/json');
+    echo json_encode([
+        'bulk'       => $bulk,
+        'retail'     => $retail,
+        'grand_total'=> (float)$bulk['total'] + (float)$retail['total'],
+        'grand_cash' => (float)$bulk['cash']  + (float)$retail['cash'],
+        'grand_momo' => (float)$bulk['momo']  + (float)$retail['momo'],
+        'grand_loan' => (float)$bulk['loan']  + (float)$retail['loan'],
+    ]);
+    exit;
 }
 
 // ── AJAX: Get purchase cost (WAC) for a product ───────────────────────────────
@@ -544,6 +589,33 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
         .lvl-btn.active .lvl-btn-name,
         .lvl-btn.active .lvl-btn-stock { color: var(--primary); }
 
+        .sales-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 12px;
+            margin: 16px 0 20px;
+        }
+        .sale-card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-top: 3px solid var(--gray-300);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow .15s, transform .15s;
+        }
+        .sale-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+        .sale-card.green  { border-top-color: #22c55e; }
+        .sale-card.orange { border-top-color: #f97316; }
+        .sale-card.blue   { border-top-color: #0ea5e9; }
+        .sale-card.purple { border-top-color: #8b5cf6; }
+        .sale-card.red    { border-top-color: #ef4444; }
+        .sale-card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--secondary); margin-bottom: 6px; }
+        .sale-card-value { font-size: 20px; font-weight: 700; color: var(--dark); line-height: 1.2; }
+        .sale-card-value.danger  { color: #ef4444; }
+        .sale-card-value.success { color: #22c55e; }
+        .sale-card-sub { font-size: 11px; color: var(--secondary); margin-top: 4px; }
+
         .sales-tab-nav {
             display: flex;
             gap: 4px;
@@ -601,17 +673,48 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
             <?php endif; ?>
 
             <div class="sale-cta-row">
-                <button class="sale-cta-btn bulk-cta" onclick="openModal('bulkSaleModal')">
+                <a href="sale_bulk.php" class="sale-cta-btn bulk-cta">
                     <span class="cta-icon">📦</span>
                     <span class="cta-label">+ Kuranguza</span>
                     <span class="cta-sub">Sell full packages</span>
-                </button>
-                <button class="sale-cta-btn retail-cta" onclick="openModal('retailSaleModal')">
+                </a>
+                <a href="sale_retail.php" class="sale-cta-btn retail-cta">
                     <span class="cta-icon">🛍️</span>
                     <span class="cta-label">+ Detaye</span>
                     <span class="cta-sub">Sell piece by piece</span>
-                </button>
+                </a>
             </div>
+            <!-- Summary Cards -->
+            <div class="sales-cards" id="salesSummaryCards">
+                <div class="sale-card">
+                    <div class="sale-card-label">All Sales</div>
+                    <div class="sale-card-value" id="sc-grand-total">—</div>
+                    <div class="sale-card-sub" id="sc-grand-sub"></div>
+                </div>
+                <div class="sale-card green">
+                    <div class="sale-card-label">Bulk (Kuranguza)</div>
+                    <div class="sale-card-value" id="sc-bulk-total">—</div>
+                    <div class="sale-card-sub" id="sc-bulk-sub"></div>
+                </div>
+                <div class="sale-card orange">
+                    <div class="sale-card-label">Retail (Detaye)</div>
+                    <div class="sale-card-value" id="sc-retail-total">—</div>
+                    <div class="sale-card-sub" id="sc-retail-sub"></div>
+                </div>
+                <div class="sale-card blue">
+                    <div class="sale-card-label">Cash Collected</div>
+                    <div class="sale-card-value" id="sc-cash" style="color:#0ea5e9;">—</div>
+                </div>
+                <div class="sale-card purple">
+                    <div class="sale-card-label">Momo Collected</div>
+                    <div class="sale-card-value" id="sc-momo" style="color:#8b5cf6;">—</div>
+                </div>
+                <div class="sale-card red">
+                    <div class="sale-card-label">On Loan</div>
+                    <div class="sale-card-value danger" id="sc-loan">—</div>
+                </div>
+            </div>
+
             <div class="recent-sales">
                 <div class="sales-tab-nav">
                     <button class="sales-tab-btn<?php echo $active_tab==='bulk'   ? ' active' : ''; ?>" onclick="switchSalesTab('bulk')"  >Ibyaranguwe</button>
@@ -1801,6 +1904,63 @@ while ($c = mysqli_fetch_assoc($loan_clients_query)) {
                 row.style.display = !term || row.textContent.toLowerCase().indexOf(term) > -1 ? '' : 'none';
             });
         }
+
+        // ── Sales summary cards ───────────────────────────────────────────────
+        function fmtRwf(n) { return 'RWF ' + parseFloat(n).toLocaleString(undefined, {maximumFractionDigits:0}); }
+
+        function loadSummaryCards() {
+            var cardIds = ['sc-grand-total','sc-bulk-total','sc-retail-total','sc-cash','sc-momo','sc-loan'];
+            cardIds.forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) { el.textContent = '…'; el.style.opacity = '0.4'; }
+            });
+
+            var fd = new FormData();
+            fd.append('get_sales_summary', '1');
+            fd.append('date_from', document.querySelector('[name="date_from"]').value);
+            fd.append('date_to',   document.querySelector('[name="date_to"]').value);
+
+            fetch('sales.php', { method: 'POST', body: fd })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    function sub(s) {
+                        var parts = [];
+                        if (+s.cash > 0) parts.push('Cash: ' + fmtRwf(s.cash));
+                        if (+s.momo > 0) parts.push('Momo: ' + fmtRwf(s.momo));
+                        if (+s.loan > 0) parts.push('Loan: ' + fmtRwf(s.loan));
+                        return s.cnt + ' sale' + (s.cnt != 1 ? 's' : '') + (parts.length ? '  ·  ' + parts.join('  ') : '');
+                    }
+                    function set(id, val) {
+                        var el = document.getElementById(id);
+                        if (el) { el.textContent = val; el.style.opacity = ''; }
+                    }
+                    set('sc-grand-total', fmtRwf(d.grand_total));
+                    set('sc-bulk-total',  fmtRwf(d.bulk.total));
+                    set('sc-retail-total',fmtRwf(d.retail.total));
+                    set('sc-cash',        fmtRwf(d.grand_cash));
+                    set('sc-momo',        fmtRwf(d.grand_momo));
+                    set('sc-loan',        fmtRwf(d.grand_loan));
+
+                    var gs = document.getElementById('sc-grand-sub');
+                    if (gs) gs.textContent = (+d.bulk.cnt + +d.retail.cnt) + ' total sales';
+                    var bs = document.getElementById('sc-bulk-sub');
+                    if (bs) bs.textContent = sub(d.bulk);
+                    var rs = document.getElementById('sc-retail-sub');
+                    if (rs) rs.textContent = sub(d.retail);
+                })
+                .catch(function() {
+                    cardIds.forEach(function(id) {
+                        var el = document.getElementById(id);
+                        if (el) { el.textContent = '—'; el.style.opacity = ''; }
+                    });
+                });
+        }
+
+        loadSummaryCards();
+
+        // Re-fetch cards when filter form is submitted
+        var filterForm = document.querySelector('.filter-inline');
+        if (filterForm) filterForm.addEventListener('submit', function() { setTimeout(loadSummaryCards, 50); });
 
         document.addEventListener('DOMContentLoaded', function() {
             const alerts = document.querySelectorAll('.alert');
