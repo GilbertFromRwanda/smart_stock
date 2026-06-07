@@ -68,6 +68,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_purchase'])) {
                 mysqli_query($conn, "UPDATE stock SET quantity = quantity + ($qty_diff), pieces_per_package = $pieces_per_qty, package_price = $package_price, retail_price = $retail_price WHERE product_id = $product_id");
             }
 
+            require_once __DIR__ . '/stock_value.php';
+            recalcStockValue($conn, (int)$product_id);
+            if ($old['product_id'] != $product_id) recalcStockValue($conn, (int)$old['product_id']);
             $_SESSION['flash_success'] = t('purch_updated_ok');
         } else {
             $_SESSION['flash_error'] = t('purch_updated_err') . ': ' . mysqli_error($conn);

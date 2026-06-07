@@ -136,6 +136,18 @@ function sub_get_latest(mysqli $conn): ?array {
          FROM subscription ORDER BY expires_at DESC LIMIT 1")) ?: null;
 }
 
+// Auto-create stock value cache table
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS stock_value_cache (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT           NOT NULL,
+    cost_wh    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    cost_rt    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    sell_wh    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    sell_rt    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_product (product_id)
+)");
+
 // Auto-create table on first run
 mysqli_query($conn, "CREATE TABLE IF NOT EXISTS subscription (
     id           INT AUTO_INCREMENT PRIMARY KEY,

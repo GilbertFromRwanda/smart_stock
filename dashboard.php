@@ -49,33 +49,24 @@ $total_retail_pieces = mysqli_fetch_assoc(mysqli_query($conn, "
 // Stock value at selling price (bulk warehouse + retail shop)
 $selling_stock_value = ($total_stock_value ?? 0) + ($total_retail_value ?? 0);
 
-// Stock value at purchase cost (weighted average cost × qty on hand)
-$purchase_stock_value = mysqli_fetch_assoc(mysqli_query($conn, "
-    SELECT COALESCE(SUM(s.quantity * avg_cost.wac), 0) AS purchase_value
-    FROM stock s
-    JOIN (
-        SELECT product_id,
-               SUM(quantity * cost_price) / NULLIF(SUM(quantity), 0) AS wac
-        FROM purchases
-        WHERE cost_price IS NOT NULL
-        GROUP BY product_id
-    ) avg_cost ON avg_cost.product_id = s.product_id
-"))['purchase_value'] ?? 0;
+// Manual recalc trigger
+if (isset($_POST['recalc_stock_value'])) {
+    require_once __DIR__ . '/stock_value.php';
+    recalcStockValue($conn);
+    header('Location: dashboard.php'); exit;
+}
 
-$purchase_retail_value = mysqli_fetch_assoc(mysqli_query($conn, "
-    SELECT COALESCE(SUM(rs.pieces_quantity * (avg_cost.wac / NULLIF(st.pieces_per_package, 1))), 0) AS purchase_value
-    FROM retail_stock rs
-    JOIN (
-        SELECT product_id,
-               SUM(quantity * cost_price) / NULLIF(SUM(quantity), 0) AS wac
-        FROM purchases
-        WHERE cost_price IS NOT NULL
-        GROUP BY product_id
-    ) avg_cost ON avg_cost.product_id = rs.product_id
-    LEFT JOIN stock st ON st.product_id = rs.product_id
-"))['purchase_value'] ?? 0;
-
-$total_purchase_stock_value = $purchase_stock_value + $purchase_retail_value;
+// Stock value at purchase cost — read from FIFO cache
+// Seed the cache if it's empty or missing rows for any stocked product
+$cache_count = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM stock_value_cache"))['c'] ?? 0);
+$stock_count = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM stock"))['c'] ?? 0);
+if ($cache_count < $stock_count) {
+    require_once __DIR__ . '/stock_value.php';
+    recalcStockValue($conn);
+}
+$total_purchase_stock_value = (float)(mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COALESCE(SUM(cost_wh + cost_rt), 0) AS total FROM stock_value_cache"
+))['total'] ?? 0);
 
 // Low stock products (below reorder level)
 $low_stock_query = mysqli_query($conn, "
@@ -354,6 +345,9 @@ if (($today_sales['total'] ?? 0) == 0) {
                     </div>
                     <div class="stat-footer">
                         <?php echo t('dash_potential_profit'); ?>: RWF <?php echo number_format($selling_stock_value - $total_purchase_stock_value, 0); ?>
+                        <form method="POST" style="display:inline;margin-left:8px;">
+                            <button type="submit" name="recalc_stock_value" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--secondary);padding:0;text-decoration:underline;" title="Recalculate FIFO stock value">↺ Recalc</button>
+                        </form>
                     </div>
                 </div>
 
