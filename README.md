@@ -111,3 +111,29 @@ The system uses 9 core tables:
 - **suppliers** - Vendor contact information
 - **users** - System users with roles and status
 - **weekly_revenue** - Aggregated weekly financial data
+
+## next updates
+
+What was implemented
+New table — stock_value_cache (run db/updates.sql)
+Stores per-product, per-company: cost_wh, cost_rt, sell_wh, sell_rt, updated_at.
+
+New file — stock_value.php
+The FIFO engine. For each product it:
+
+Walks purchases newest-first, filling warehouse qty first
+Continues filling retail stock (as package-equivalents)
+Upserts the result into the cache
+New file — ajax_recalc_stock.php
+Called by the dashboard "Recalculate" button. Rebuilds the full cache for the current company and returns the new totals.
+
+ajax_dashboard.php
+Replaced 4 heavy queries (WAC subjoins) with a single SUM() from the cache. On first load with an empty cache, it auto-seeds via recalcStockValue().
+
+Hooks added to new-purchase.php, purchases.php, sales.php, stock.php
+Every write that changes stock quantities or cost prices triggers recalcStockValue($conn, cid(), $product_id) for just that product — fast, surgical updates.
+
+dashboard.php
+The cost card footer now shows "Updated HH:MM" and a "Recalculate" link for on-demand full rebuild.
+
+To activate: run db/updates.sql to create the table, then visit the dashboard — the cache will auto-seed on first load.

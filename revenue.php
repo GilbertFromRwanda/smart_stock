@@ -62,7 +62,7 @@ function updateWeeklyRevenue($conn) {
     while ($sale = mysqli_fetch_assoc($retail_query)) {
         $retail_total += $sale['total_amount'];
         // Calculate cost per piece
-        $pieces_per_package = $sale['pieces_per_package'] ?? 1;
+        $pieces_per_package = ($sale['pieces_per_package'] ?? 0) ?: 1;
         $cost_per_piece = ($sale['last_cost_price'] ?? 0) / $pieces_per_package;
         $cost = $cost_per_piece * $sale['pieces_sold'];
         $retail_cost_total += $cost;
@@ -209,7 +209,7 @@ $current_week_sales = mysqli_query($conn, "
         l.loan_date as sale_date,
         p.name as product_name,
         l.qty as quantity,
-        COALESCE(l.unit_price, l.amount / l.qty) as selling_price,
+        COALESCE(l.unit_price, l.amount / NULLIF(l.qty, 0)) as selling_price,
         COALESCE(l.unit_price * l.qty, l.amount) as total_amount,
         COALESCE(pu.cost_price, 0) as purchase_price,
         COALESCE(pu.cost_price * l.qty, 0) as total_cost,
@@ -234,7 +234,7 @@ $current_week_sales = mysqli_query($conn, "
         l.loan_date as sale_date,
         p.name as product_name,
         l.qty as quantity,
-        COALESCE(l.unit_price, l.amount / l.qty) as selling_price,
+        COALESCE(l.unit_price, l.amount / NULLIF(l.qty, 0)) as selling_price,
         COALESCE(l.unit_price * l.qty, l.amount) as total_amount,
         COALESCE(pu.cost_price, 0) as purchase_price,
         COALESCE((pu.cost_price / NULLIF(s.pieces_per_package, 0)) * l.qty, 0) as total_cost,
@@ -300,7 +300,7 @@ $product_profitability = mysqli_query($conn, "
             )), 0
         ) + COALESCE(
             (COALESCE(SUM(sr.pieces_sold), 0) * (
-                SELECT pu.cost_price / NULLIF(s.pieces_per_package, 1) 
+                SELECT pu.cost_price / NULLIF(s.pieces_per_package, 0)
                 FROM purchases pu, stock s
                 WHERE pu.product_id = p.id 
                 AND s.product_id = p.id
@@ -317,7 +317,7 @@ $product_profitability = mysqli_query($conn, "
                 )), 0
             ) - COALESCE(
                 (COALESCE(SUM(sr.pieces_sold), 0) * (
-                    SELECT pu.cost_price / NULLIF(s.pieces_per_package, 1) 
+                    SELECT pu.cost_price / NULLIF(s.pieces_per_package, 0)
                     FROM purchases pu, stock s
                     WHERE pu.product_id = p.id 
                     AND s.product_id = p.id
@@ -693,7 +693,7 @@ $today_margin = $today_sales > 0 ? ($today_profit / $today_sales) * 100 : 0;
                         <tbody>
                             <?php while($product = mysqli_fetch_assoc($product_profitability)): 
                                 $avg_selling_price = 0;
-                                $pieces_per_package = $product['pieces_per_package'] ?? 1;
+                                $pieces_per_package = ($product['pieces_per_package'] ?? 0) ?: 1;
                                 $total_units = $product['total_packages_sold'] + ($product['total_pieces_sold'] / $pieces_per_package);
                                 $margin_percentage = ($product['total_revenue'] ?? 0) > 0 ? 
                                     (($product['total_profit'] ?? 0) / ($product['total_revenue'] ?? 1) * 100) : 0;
