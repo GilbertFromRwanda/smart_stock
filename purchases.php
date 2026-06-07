@@ -493,85 +493,6 @@ if (!empty($all_rows)) {
             });
         }
 
-        // Searchable product select
-        (function() {
-            var hiddenInput = document.getElementById('product_id');
-            var searchInput = document.getElementById('product_search');
-            var dropdown = document.getElementById('product_dropdown');
-            var options = dropdown.querySelectorAll('.searchable-select-option');
-            var highlightedIndex = -1;
-
-            searchInput.addEventListener('focus', function() {
-                dropdown.classList.add('open');
-                filterOptions();
-            });
-
-            searchInput.addEventListener('input', function() {
-                dropdown.classList.add('open');
-                highlightedIndex = -1;
-                filterOptions();
-            });
-
-            searchInput.addEventListener('keydown', function(e) {
-                var visible = dropdown.querySelectorAll('.searchable-select-option:not(.hidden)');
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    highlightedIndex = Math.min(highlightedIndex + 1, visible.length - 1);
-                    updateHighlight(visible);
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    highlightedIndex = Math.max(highlightedIndex - 1, 0);
-                    updateHighlight(visible);
-                } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (highlightedIndex >= 0 && visible[highlightedIndex]) {
-                        selectOption(visible[highlightedIndex]);
-                    }
-                } else if (e.key === 'Escape') {
-                    dropdown.classList.remove('open');
-                    searchInput.blur();
-                }
-            });
-
-            document.addEventListener('click', function(e) {
-                if (!e.target.closest('#productSearchable')) {
-                    dropdown.classList.remove('open');
-                }
-            });
-
-            options.forEach(function(opt) {
-                opt.addEventListener('click', function() {
-                    selectOption(opt);
-                });
-            });
-
-            function filterOptions() {
-                var term = searchInput.value.toLowerCase();
-                options.forEach(function(opt) {
-                    if (opt.textContent.trim().toLowerCase().indexOf(term) > -1) {
-                        opt.classList.remove('hidden');
-                    } else {
-                        opt.classList.add('hidden');
-                    }
-                });
-            }
-
-            function updateHighlight(visible) {
-                options.forEach(function(o) { o.classList.remove('highlighted'); });
-                if (visible[highlightedIndex]) {
-                    visible[highlightedIndex].classList.add('highlighted');
-                    visible[highlightedIndex].scrollIntoView({ block: 'nearest' });
-                }
-            }
-
-            function selectOption(opt) {
-                hiddenInput.value = opt.getAttribute('data-value');
-                searchInput.value = opt.textContent.trim();
-                dropdown.classList.remove('open');
-                highlightedIndex = -1;
-            }
-        })();
-
         // Open edit purchase modal with data
         function openEditPurchase(btn) {
             var data = btn.dataset;
@@ -635,19 +556,13 @@ if (!empty($all_rows)) {
             });
 
             options.forEach(function(opt) {
-                opt.addEventListener('click', function() {
-                    selectOption(opt);
-                });
+                opt.addEventListener('click', function() { selectOption(opt); });
             });
 
             function filterOptions() {
                 var term = searchInput.value.toLowerCase();
                 options.forEach(function(opt) {
-                    if (opt.textContent.trim().toLowerCase().indexOf(term) > -1) {
-                        opt.classList.remove('hidden');
-                    } else {
-                        opt.classList.add('hidden');
-                    }
+                    opt.classList.toggle('hidden', opt.textContent.trim().toLowerCase().indexOf(term) === -1);
                 });
             }
 
