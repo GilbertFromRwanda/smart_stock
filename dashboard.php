@@ -26,29 +26,6 @@ $month_end = date('Y-m-t');
 // Total products
 $total_products = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as count FROM products"))['count'];
 
-// Total stock value (main warehouse)
-$stock_value_query = mysqli_query($conn, "
-    SELECT SUM(quantity * package_price) as total_value 
-    FROM stock
-");
-$total_stock_value = mysqli_fetch_assoc($stock_value_query)['total_value'] ?? 0;
-
-// Total retail stock value
-$retail_value_query = mysqli_query($conn, "
-    SELECT SUM(pieces_quantity * retail_price) as total_value 
-    FROM retail_stock
-");
-$total_retail_value = mysqli_fetch_assoc($retail_value_query)['total_value'] ?? 0;
-
-// Total retail pieces
-$total_retail_pieces = mysqli_fetch_assoc(mysqli_query($conn, "
-    SELECT SUM(pieces_quantity) as total
-    FROM retail_stock
-"))['total'] ?? 0;
-
-// Stock value at selling price (bulk warehouse + retail shop)
-$selling_stock_value = ($total_stock_value ?? 0) + ($total_retail_value ?? 0);
-
 // Manual recalc trigger
 if (isset($_POST['recalc_stock_value'])) {
     require_once __DIR__ . '/stock_value.php';
@@ -56,16 +33,33 @@ if (isset($_POST['recalc_stock_value'])) {
     header('Location: dashboard.php'); exit;
 }
 
-// Stock value at purchase cost — read from FIFO cache
-// Seed the cache if it's empty or missing rows for any stocked product
+// Always include so the cache table is guaranteed to exist
+require_once __DIR__ . '/stock_value.php';
+
+// Seed cache if any stocked product is missing a row
 $cache_count = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM stock_value_cache"))['c'] ?? 0);
 $stock_count = (int)(mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) c FROM stock"))['c'] ?? 0);
 if ($cache_count < $stock_count) {
-    require_once __DIR__ . '/stock_value.php';
     recalcStockValue($conn);
 }
-$total_purchase_stock_value = (float)(mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT COALESCE(SUM(cost_wh + cost_rt), 0) AS total FROM stock_value_cache"
+
+// Read both selling and cost values from cache (single query)
+$sv = mysqli_fetch_assoc(mysqli_query($conn, "
+    SELECT COALESCE(SUM(sell_wh), 0) sell_wh,
+           COALESCE(SUM(sell_rt), 0) sell_rt,
+           COALESCE(SUM(cost_wh), 0) cost_wh,
+           COALESCE(SUM(cost_rt), 0) cost_rt
+    FROM stock_value_cache
+")) ?? [];
+
+$total_stock_value          = (float)($sv['sell_wh'] ?? 0);
+$total_retail_value         = (float)($sv['sell_rt'] ?? 0);
+$selling_stock_value        = $total_stock_value + $total_retail_value;
+$total_purchase_stock_value = (float)(($sv['cost_wh'] ?? 0) + ($sv['cost_rt'] ?? 0));
+
+// Total retail pieces (still needed for display elsewhere)
+$total_retail_pieces = (int)(mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COALESCE(SUM(pieces_quantity),0) total FROM retail_stock"
 ))['total'] ?? 0);
 
 // Low stock products (below reorder level)

@@ -1,10 +1,23 @@
 <?php
 /**
- * Recalculates and caches stock values per product (FIFO cost).
- *
- * FIFO: newest purchases fill warehouse qty first, then retail pieces.
- * Selling values: qty × current price from stock / retail_stock.
- *
+ * FIFO stock value cache — cost and selling values per product.
+ * Including this file auto-creates the cache table if missing.
+ */
+global $conn;
+if (isset($conn)) {
+    mysqli_query($conn, "CREATE TABLE IF NOT EXISTS stock_value_cache (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT           NOT NULL,
+        cost_wh    DECIMAL(12,2) NOT NULL DEFAULT 0,
+        cost_rt    DECIMAL(12,2) NOT NULL DEFAULT 0,
+        sell_wh    DECIMAL(12,2) NOT NULL DEFAULT 0,
+        sell_rt    DECIMAL(12,2) NOT NULL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_product (product_id)
+    )");
+}
+
+/**
  * @param mysqli   $conn
  * @param int|null $product_id  null = recalc all products
  */
