@@ -16,6 +16,7 @@ return [
     'nav_products'         => 'Ibicuruzwa',
     'nav_stock'            => 'Ububiko',
     'nav_purchases'        => 'Irangura',
+    'nav_purchase_advice'  => 'Inama y\'Irangura',
     'nav_sales'            => 'Igurisha',
     'nav_suppliers'        => 'Ababatanti',
     'nav_home_consumption' => 'Ikoreshwa mu Rugo',

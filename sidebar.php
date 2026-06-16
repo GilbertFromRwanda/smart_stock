@@ -3,48 +3,42 @@ $current_page = basename($_SERVER['PHP_SELF']);
 $role = $_SESSION['role'] ?? 'staff';
 $_lang_code = $_LANG_CODE;
 
-// Subscription expiry info (for admin badge)
 $_sub_info = sub_get_latest($conn);
 $_sub_days = $_sub_info ? (int)$_sub_info['days_left'] : -999;
-$_sub_warn = $_sub_days >= 0 && $_sub_days <= 14; // show badge within 14 days
+$_sub_warn = $_sub_days >= 0 && $_sub_days <= 14;
 
 $nav = [
     'main' => [
         'label' => t('nav_main'),
         'items' => [
-            ['href' => 'dashboard.php',  'icon' => '▣',  'label' => t('nav_dashboard')],
-            ['href' => 'products.php',   'icon' => '◫',  'label' => t('nav_products')],
-            ['href' => 'stock.php',      'icon' => '⊞',  'label' => t('nav_stock')],
-            ['href' => 'purchases.php',  'icon' => '⤵',  'label' => t('nav_purchases')],
-            [
-                'href'    => 'sales.php',
-                'icon'    => '⤴',
-                'label'   => t('nav_sales'),
-                'submenu' => [
-                    ['href' => 'sales.php',       'label' => 'View All'],
-                    ['href' => 'sale_bulk.php',   'label' => 'New Bulk Sale'],
-                    ['href' => 'sale_retail.php', 'label' => 'New Retail Sale'],
-                ],
-            ],
-            ['href' => 'suppliers.php',  'icon' => '⊙',  'label' => t('nav_suppliers')],
-            ['href' => 'wishlist.php',   'icon' => '★',  'label' => 'Wishlist'],
+            ['href' => 'dashboard.php',       'icon' => '▣',  'label' => t('nav_dashboard')],
+            ['href' => 'products.php',         'icon' => '◫',  'label' => t('nav_products')],
+            ['href' => 'stock.php',            'icon' => '⊞',  'label' => t('nav_stock')],
+            ['href' => 'purchases.php',        'icon' => '⤵',  'label' => t('nav_purchases')],
+            ['href' => 'purchase_advice.php',  'icon' => '💡', 'label' => t('nav_purchase_advice')],
+            ['href' => 'sales.php',            'icon' => '⤴',  'label' => 'Sales – View All'],
+            ['href' => 'sale_bulk.php',        'icon' => '⤴',  'label' => 'New Bulk Sale'],
+            ['href' => 'sale_retail.php',      'icon' => '⤴',  'label' => 'New Retail Sale'],
+            ['href' => 'suppliers.php',        'icon' => '⊙',  'label' => t('nav_suppliers')],
+            ['href' => 'wishlist.php',         'icon' => '★',  'label' => 'Wishlist'],
+            ['href' => 'notes.php',            'icon' => '📝', 'label' => 'Notes'],
         ]
     ],
     'finance' => [
         'label' => t('nav_finance'),
         'items' => [
-            ['href' => 'consumption.php','icon' => '⌂',  'label' => t('nav_home_consumption')],
-            ['href' => 'expenses.php',   'icon' => '−',  'label' => t('nav_expenses')],
-            ['href' => 'loans.php',      'icon' => '⇄',  'label' => t('nav_loans')],
-            ['href' => 'boaster.php',    'icon' => '↑',  'label' => t('nav_top_up')],
+            ['href' => 'consumption.php', 'icon' => '⌂', 'label' => t('nav_home_consumption')],
+            ['href' => 'expenses.php',    'icon' => '−', 'label' => t('nav_expenses')],
+            ['href' => 'loans.php',       'icon' => '⇄', 'label' => t('nav_loans')],
+            ['href' => 'boaster.php',     'icon' => '↑', 'label' => t('nav_top_up')],
         ]
     ],
     'reports' => [
         'label' => t('nav_reports'),
         'roles' => ['admin', 'manager'],
         'items' => [
-            ['href' => 'summary-revenue.php','icon' => '◈', 'label' => t('nav_revenue_summary')],
-            ['href' => 'revenue.php',        'icon' => '◉', 'label' => t('nav_profit_analysis')],
+            ['href' => 'summary-revenue.php', 'icon' => '◈', 'label' => t('nav_revenue_summary')],
+            ['href' => 'revenue.php',         'icon' => '◉', 'label' => t('nav_profit_analysis')],
         ]
     ],
     'admin' => [
@@ -58,274 +52,325 @@ $nav = [
         ]
     ],
 ];
-?>
-<div class="sidebar">
-    <div class="sidebar-brand">
-        <div class="sidebar-brand-icon">S</div>
-        <div>
-            <div class="sidebar-brand-name">UO &amp; GN</div>
-            <div class="sidebar-brand-sub">Boutique</div>
-        </div>
-    </div>
 
-    <nav class="sidebar-nav">
-        <?php foreach ($nav as $section): ?>
-            <?php if (isset($section['roles']) && !in_array($role, $section['roles'])) continue; ?>
-            <div class="nav-section-label"><?php echo $section['label']; ?></div>
-            <?php foreach ($section['items'] as $item): ?>
-                <?php
-                if (isset($item['roles_item']) && !in_array($role, $item['roles_item'])) continue;
-                if (!empty($item['submenu'])):
-                    $sub_active = false;
-                    foreach ($item['submenu'] as $sub) {
-                        if ($current_page === $sub['href']) { $sub_active = true; break; }
-                    }
-                ?>
-                <div class="nav-item-group<?php echo $sub_active ? ' open' : ''; ?>">
-                    <button type="button" class="nav-item nav-item-toggle<?php echo $sub_active ? ' active' : ''; ?>" onclick="toggleSubmenu(this)">
-                        <span class="nav-icon"><?php echo $item['icon']; ?></span>
-                        <span class="nav-label"><?php echo $item['label']; ?></span>
-                        <span class="nav-chevron">&#8250;</span>
-                    </button>
-                    <div class="nav-submenu">
-                        <?php foreach ($item['submenu'] as $sub):
-                            $sub_is_active = $current_page === $sub['href'];
-                        ?>
-                        <a href="<?php echo $sub['href']; ?>" class="nav-subitem<?php echo $sub_is_active ? ' active' : ''; ?>">
-                            <span class="nav-sub-dot"></span>
-                            <?php echo $sub['label']; ?>
-                            <?php if ($sub_is_active): ?><span class="nav-active-dot"></span><?php endif; ?>
-                        </a>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-                <?php else:
-                $active = $current_page === $item['href'];
-                ?>
-                <a href="<?php echo $item['href']; ?>" class="nav-item<?php echo $active ? ' active' : ''; ?>">
-                    <span class="nav-icon"><?php echo $item['icon']; ?></span>
-                    <span class="nav-label"><?php echo $item['label']; ?></span>
-                    <?php if ($active): ?><span class="nav-active-dot"></span><?php endif; ?>
-                </a>
+// Determine which section is active
+$active_section = null;
+$sales_pages = ['sales.php','sale_bulk.php','sale_retail.php'];
+foreach ($nav as $key => $section) {
+    if (isset($section['roles']) && !in_array($role, $section['roles'])) continue;
+    foreach ($section['items'] as $item) {
+        if (isset($item['roles_item']) && !in_array($role, $item['roles_item'])) continue;
+        if ($current_page === $item['href']) { $active_section = $key; break 2; }
+    }
+}
+?>
+<div class="topbar" id="topbar">
+
+    <!-- Brand -->
+    <a href="dashboard.php" class="topbar-brand">
+        <div class="topbar-brand-icon">S</div>
+        <div>
+            <span class="topbar-brand-name">UO &amp; GN</span>
+            <span class="topbar-brand-sub">Boutique</span>
+        </div>
+    </a>
+
+    <!-- Mobile hamburger -->
+    <button class="topbar-hamburger" onclick="tbToggleMobile()" aria-label="Menu">☰</button>
+
+    <!-- Nav groups -->
+    <nav class="topbar-nav" id="topbarNav">
+        <?php foreach ($nav as $sec_key => $section): ?>
+        <?php if (isset($section['roles']) && !in_array($role, $section['roles'])) continue; ?>
+        <?php $sec_active = ($active_section === $sec_key); ?>
+        <div class="tb-group">
+            <button type="button"
+                    class="tb-btn<?php echo $sec_active ? ' active' : ''; ?>"
+                    onclick="tbToggle(this)">
+                <?php echo $section['label']; ?>
+                <?php if ($sec_key === 'admin' && $_sub_warn): ?>
+                <span class="tb-sub-dot<?php echo $_sub_days <= 3 ? ' critical' : ''; ?>"></span>
                 <?php endif; ?>
-            <?php endforeach; ?>
+                <span class="tb-chevron">▾</span>
+            </button>
+            <div class="tb-dropdown">
+                <?php foreach ($section['items'] as $item): ?>
+                <?php if (isset($item['roles_item']) && !in_array($role, $item['roles_item'])) continue; ?>
+                <a href="<?php echo $item['href']; ?>"
+                   class="tb-drop-item<?php echo $current_page === $item['href'] ? ' active' : ''; ?>">
+                    <span class="tb-drop-icon"><?php echo $item['icon']; ?></span>
+                    <?php echo $item['label']; ?>
+                </a>
+                <?php endforeach; ?>
+                <?php if ($sec_key === 'admin' && $_sub_warn): ?>
+                <div class="tb-sub-warn <?php echo $_sub_days <= 3 ? 'critical' : ''; ?>">
+                    🔑 <?php echo $_sub_days <= 0 ? t('sub_expired_label') : $_sub_days . ' ' . t('sub_days_left'); ?>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
         <?php endforeach; ?>
     </nav>
 
-    <!-- Subscription expiry warning (admin only, within 14 days) -->
-    <?php if ($role === 'admin' && $_sub_warn): ?>
-    <a href="subscription.php" class="sub-expiry-bar <?php echo $_sub_days <= 3 ? 'critical' : ''; ?>">
-        <span>🔑</span>
-        <span>
-            <?php if ($_sub_days <= 0): ?>
-                <?php echo t('sub_expired_label'); ?>
-            <?php else: ?>
-                <?php echo $_sub_days; ?> <?php echo t('sub_days_left'); ?>
-            <?php endif; ?>
-        </span>
-    </a>
-    <?php endif; ?>
+    <!-- Right: lang + user -->
+    <div class="topbar-right" id="topbarRight">
+        <div class="tb-lang">
+            <?php foreach (['en' => 'EN', 'fr' => 'FR', 'rw' => 'RW'] as $code => $lbl): ?>
+            <a href="set_lang.php?lang=<?php echo $code; ?>"
+               class="lang-btn<?php echo $_lang_code === $code ? ' lang-active' : ''; ?>"><?php echo $lbl; ?></a>
+            <?php endforeach; ?>
+        </div>
 
-    <!-- Language switcher -->
-    <div class="sidebar-lang">
-        <?php
-        $langs = ['en' => 'EN', 'fr' => 'FR', 'rw' => 'RW'];
-        foreach ($langs as $code => $label):
-            $active_cls = ($_lang_code === $code) ? ' lang-active' : '';
-        ?>
-        <a href="set_lang.php?lang=<?php echo $code; ?>" class="lang-btn<?php echo $active_cls; ?>"
-           title="<?php echo t('lang_' . $code); ?>"><?php echo $label; ?></a>
-        <?php endforeach; ?>
-    </div>
-
-    <div class="sidebar-footer">
-        <div class="sidebar-user">
-            <div class="sidebar-avatar"><?php echo strtoupper(substr($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'U', 0, 1)); ?></div>
-            <div class="sidebar-user-info">
-                <div class="sidebar-user-name"><?php echo htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username']); ?></div>
-                <div class="sidebar-user-role"><?php echo ucfirst($role); ?></div>
+        <div class="tb-group">
+            <button type="button" class="tb-user-btn" onclick="tbToggle(this)">
+                <span class="tb-avatar"><?php echo strtoupper(substr($_SESSION['full_name'] ?? $_SESSION['username'] ?? 'U', 0, 1)); ?></span>
+                <span class="tb-uname"><?php echo htmlspecialchars($_SESSION['full_name'] ?? $_SESSION['username']); ?></span>
+                <span class="tb-chevron">▾</span>
+            </button>
+            <div class="tb-dropdown tb-dropdown-right">
+                <div class="tb-drop-label"><?php echo ucfirst($role); ?></div>
+                <a href="logout.php" class="tb-drop-item danger">⏻ <?php echo t('btn_close') ?: 'Logout'; ?></a>
             </div>
         </div>
-        <a href="logout.php" class="sidebar-logout" title="<?php echo t('btn_close'); ?>">⏻</a>
     </div>
 </div>
 
+<!-- ── Quick menu ── -->
+<div class="quick-menu">
+    <?php
+    $quick = [
+        ['href' => 'dashboard.php',      'icon' => '▣', 'label' => t('nav_dashboard')],
+        ['href' => 'sale_bulk.php',      'icon' => '⤴', 'label' => 'Bulk Sale'],
+        ['href' => 'sale_retail.php',    'icon' => '⤴', 'label' => 'Retail Sale'],
+        ['href' => 'purchases.php',      'icon' => '⤵', 'label' => t('nav_purchases')],
+        ['href' => 'stock.php',          'icon' => '⊞', 'label' => t('nav_stock')],
+        ['href' => 'purchase_advice.php','icon' => '💡', 'label' => t('nav_purchase_advice')],
+        ['href' => 'expenses.php',       'icon' => '−', 'label' => t('nav_expenses')],
+        ['href' => 'loans.php',          'icon' => '⇄', 'label' => t('nav_loans')],
+    ];
+    foreach ($quick as $q):
+        $a = $current_page === $q['href'] ? ' active' : '';
+    ?>
+    <a href="<?php echo $q['href']; ?>" class="qm-link<?php echo $a; ?>">
+        <span class="qm-icon"><?php echo $q['icon']; ?></span>
+        <span class="qm-label"><?php echo $q['label']; ?></span>
+    </a>
+    <?php endforeach; ?>
+</div>
+
 <style>
-/* ── Sidebar redesign ─────────────────────────────────────────────────────── */
-.sidebar {
-    width: 240px;
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 56px;
     background: #0f172a;
-    color: #cbd5e1;
-    padding: 0;
-    position: fixed;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 4px 0 24px rgba(0,0,0,.18);
-    border-right: none;
-    z-index: 100;
+    display: flex; align-items: center;
+    padding: 0 14px; gap: 4px;
+    z-index: 1000;
+    box-shadow: 0 2px 16px rgba(0,0,0,.3);
 }
 
 /* Brand */
-.sidebar-brand {
-    display: flex; align-items: center; gap: 12px;
-    padding: 22px 20px 18px;
-    border-bottom: 1px solid rgba(255,255,255,.07);
+.topbar-brand {
+    display: flex; align-items: center; gap: 10px;
+    text-decoration: none; flex-shrink: 0;
+    padding-right: 14px;
+    border-right: 1px solid rgba(255,255,255,.1);
+    margin-right: 4px;
 }
-.sidebar-brand-icon {
-    width: 38px; height: 38px; border-radius: 10px;
+.topbar-brand-icon {
+    width: 32px; height: 32px; border-radius: 8px;
     background: linear-gradient(135deg,#3b82f6,#6366f1);
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 800; color: #fff; flex-shrink: 0;
+    font-size: 12px; font-weight: 800; color: #fff; flex-shrink: 0;
 }
-.sidebar-brand-name {
-    font-size: 15px; font-weight: 700; color: #f1f5f9; line-height: 1.1;
-}
-.sidebar-brand-sub {
-    font-size: 11px; color: #64748b; margin-top: 1px;
-}
+.topbar-brand-name { font-size: 13px; font-weight: 700; color: #f1f5f9; display: block; line-height: 1.15; }
+.topbar-brand-sub  { font-size: 10px; color: #64748b; display: block; }
 
 /* Nav */
-.sidebar-nav {
-    flex: 1; overflow-y: auto; padding: 12px 10px;
-    scrollbar-width: thin; scrollbar-color: #1e293b transparent;
+.topbar-nav {
+    display: flex; align-items: center; gap: 2px; flex: 1;
 }
-.sidebar-nav::-webkit-scrollbar { width: 4px; }
-.sidebar-nav::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
 
-.nav-section-label {
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 1px; color: #475569;
-    padding: 14px 10px 6px;
-}
-.nav-section-label:first-child { padding-top: 4px; }
+/* Groups / buttons */
+.tb-group { position: relative; }
 
-.nav-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 12px; border-radius: 8px; margin-bottom: 2px;
-    color: #94a3b8; text-decoration: none;
-    font-size: 13.5px; font-weight: 500;
-    transition: background .15s, color .15s;
-    position: relative;
+.tb-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 6px 11px; border-radius: 7px;
+    background: none; border: none; cursor: pointer; font-family: inherit;
+    font-size: 13px; font-weight: 500; color: #94a3b8;
+    transition: background .14s, color .14s; white-space: nowrap;
 }
-.nav-item:hover {
-    background: rgba(255,255,255,.06);
-    color: #f1f5f9;
-}
-.nav-item.active {
-    background: linear-gradient(90deg,rgba(59,130,246,.22),rgba(99,102,241,.12));
-    color: #93c5fd;
-}
-.nav-icon {
-    font-size: 15px; width: 20px; text-align: center;
-    flex-shrink: 0; opacity: .85;
-}
-.nav-label { flex: 0; }
+.tb-btn:hover { background: rgba(255,255,255,.08); color: #f1f5f9; }
+.tb-btn.active { color: #93c5fd; }
 
-/* Submenu */
-.nav-item-toggle {
-    width: 100%; background: none; border: none; cursor: pointer; font-family: inherit;
-}
-.nav-chevron {
-    font-size: 16px; margin-left: auto; color: #475569;
-    transition: transform .2s; line-height: 1; flex-shrink: 0;
-}
-.nav-item-group.open .nav-chevron { transform: rotate(90deg); }
-.nav-submenu {
-    overflow: hidden; max-height: 0;
-    transition: max-height .25s ease;
-}
-.nav-item-group.open .nav-submenu { max-height: 200px; }
-.nav-subitem {
+.tb-user-btn {
     display: flex; align-items: center; gap: 7px;
-    padding: 5px 10px 5px 30px;
-    font-size: 13px; font-weight: 500; color: #64748b;
-    text-decoration: none; border-radius: 8px; margin-bottom: 2px;
-    transition: background .15s, color .15s; position: relative;
+    padding: 5px 10px 5px 5px; border-radius: 8px;
+    background: none; border: none; cursor: pointer; font-family: inherit;
+    color: #94a3b8; transition: background .14s, color .14s;
 }
-.nav-subitem:hover { background: rgba(255,255,255,.06); color: #f1f5f9; }
-.nav-subitem.active { color: #93c5fd; }
-.nav-sub-dot {
-    width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0;
-    background: #334155; transition: background .15s;
-}
-.nav-subitem:hover .nav-sub-dot,
-.nav-subitem.active .nav-sub-dot { background: #3b82f6; }
+.tb-user-btn:hover { background: rgba(255,255,255,.08); color: #f1f5f9; }
 
-.nav-active-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: #3b82f6; flex-shrink: 0;
+.tb-chevron { font-size: 10px; opacity: .55; pointer-events: none; }
+
+/* Subscription dot on admin btn */
+.tb-sub-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #f59e0b; flex-shrink: 0;
+}
+.tb-sub-dot.critical { background: #ef4444; }
+
+/* Dropdown */
+.tb-dropdown {
+    display: none;
+    position: absolute; top: calc(100% + 8px); left: 0;
+    background: #1e293b; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 10px; padding: 6px;
+    min-width: 210px;
+    box-shadow: 0 10px 36px rgba(0,0,0,.4);
+    z-index: 2000;
+}
+.tb-dropdown-right { left: auto; right: 0; }
+/* hover open — desktop */
+.tb-group:hover .tb-dropdown { display: block; }
+/* invisible bridge fills the gap between button and dropdown so mouse-move doesn't close it */
+.tb-dropdown::before {
+    content: ''; position: absolute; top: -8px; left: 0; right: 0; height: 8px;
 }
 
-/* Subscription expiry bar */
-.sub-expiry-bar {
-    display: flex; align-items: center; gap: 8px; justify-content: center;
-    padding: 7px 14px;
-    background: rgba(245,158,11,.12);
-    border-top: 1px solid rgba(245,158,11,.25);
-    font-size: 12px; font-weight: 700; color: #fbbf24;
-    text-decoration: none; transition: background .15s;
+.tb-drop-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 12px; border-radius: 7px;
+    font-size: 13px; font-weight: 500; color: #94a3b8;
+    text-decoration: none;
+    transition: background .12s, color .12s; white-space: nowrap;
 }
-.sub-expiry-bar:hover { background: rgba(245,158,11,.2); }
-.sub-expiry-bar.critical { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.25); color: #f87171; }
-.sub-expiry-bar.critical:hover { background: rgba(239,68,68,.2); }
+.tb-drop-item:hover { background: rgba(255,255,255,.07); color: #f1f5f9; }
+.tb-drop-item.active { color: #93c5fd; background: rgba(59,130,246,.15); }
+.tb-drop-item.danger:hover { color: #f87171; background: rgba(248,113,113,.1); }
 
-/* Language switcher */
-.sidebar-lang {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    padding: 8px 14px;
-    border-top: 1px solid rgba(255,255,255,.07);
+.tb-drop-icon { font-size: 13px; width: 18px; text-align: center; opacity: .75; flex-shrink: 0; }
+
+.tb-drop-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .8px; color: #475569; padding: 5px 12px 3px;
 }
+
+.tb-sub-warn {
+    margin: 4px 6px 2px; padding: 6px 10px; border-radius: 7px;
+    font-size: 11px; font-weight: 700; color: #fbbf24;
+    background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.2);
+}
+.tb-sub-warn.critical { color: #f87171; background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.2); }
+
+/* Right side */
+.topbar-right {
+    display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0; margin-left: auto;
+    padding-left: 12px;
+    border-left: 1px solid rgba(255,255,255,.09);
+}
+
+/* Lang */
+.tb-lang { display: flex; align-items: center; gap: 4px; }
 .lang-btn {
     font-size: 11px; font-weight: 700; color: #64748b;
-    text-decoration: none; padding: 4px 9px; border-radius: 6px;
+    text-decoration: none; padding: 3px 7px; border-radius: 5px;
     border: 1px solid rgba(255,255,255,.08);
-    transition: background .15s, color .15s, border-color .15s;
-    letter-spacing: .5px;
+    transition: background .14s, color .14s, border-color .14s; letter-spacing: .5px;
 }
-.lang-btn:hover { color: #f1f5f9; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); }
+.lang-btn:hover { color: #f1f5f9; background: rgba(255,255,255,.08); }
 .lang-btn.lang-active { color: #93c5fd; background: rgba(59,130,246,.18); border-color: rgba(59,130,246,.4); }
 
-/* Footer */
-.sidebar-footer {
-    display: flex; align-items: center; gap: 10px;
-    padding: 14px 14px;
-    border-top: 1px solid rgba(255,255,255,.07);
-    background: rgba(0,0,0,.15);
-}
-.sidebar-avatar {
-    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+/* Avatar */
+.tb-avatar {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
     background: linear-gradient(135deg,#3b82f6,#6366f1);
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700; color: #fff;
+    font-size: 11px; font-weight: 700; color: #fff;
 }
-.sidebar-user { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-.sidebar-user-info { min-width: 0; }
-.sidebar-user-name {
-    font-size: 13px; font-weight: 600; color: #f1f5f9;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.tb-uname {
+    font-size: 13px; font-weight: 500; color: inherit;
+    max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.sidebar-user-role { font-size: 11px; color: #64748b; margin-top: 1px; }
-.sidebar-logout {
-    font-size: 18px; color: #64748b; text-decoration: none;
-    flex-shrink: 0; padding: 4px; border-radius: 6px;
-    transition: color .15s, background .15s;
-    line-height: 1;
-}
-.sidebar-logout:hover { color: #f87171; background: rgba(248,113,113,.1); }
 
-/* Adjust main content margin */
-.main-content { margin-left: 240px; }
+/* Hamburger (mobile only) */
+.topbar-hamburger {
+    display: none; background: none; border: none; cursor: pointer;
+    font-size: 20px; color: #94a3b8; padding: 4px 8px; margin-left: auto;
+}
 
-@media (max-width: 768px) {
-    .sidebar { width: 100%; height: auto; position: relative; flex-direction: column; }
-    .sidebar-nav { max-height: 60vh; }
-    .main-content { margin-left: 0; }
+/* ── Quick menu ──────────────────────────────────────────────────────────── */
+.quick-menu {
+    position: fixed; top: 56px; left: 0; right: 0;
+    height: 38px;
+    background: #fff; border-bottom: 1px solid var(--gray-200);
+    display: flex; align-items: center;
+    padding: 0 20px; gap: 2px;
+    z-index: 999;
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none;
+}
+.quick-menu::-webkit-scrollbar { display: none; }
+
+.qm-link {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 500; color: var(--secondary);
+    text-decoration: none; white-space: nowrap;
+    transition: background .13s, color .13s;
+    flex-shrink: 0;
+}
+.qm-link:hover { background: var(--gray-100); color: var(--dark); }
+.qm-link.active { background: #eff6ff; color: #2563eb; font-weight: 600; }
+
+.qm-icon { font-size: 12px; opacity: .7; }
+.qm-label { }
+
+/* ── Layout reset ────────────────────────────────────────────────────────── */
+.dashboard-container { display: block !important; }
+.main-content { margin-left: 0 !important; margin-top: 94px; padding: 28px; }
+
+/* ── Mobile ──────────────────────────────────────────────────────────────── */
+@media (max-width: 840px) {
+    .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px 0; gap: 0; }
+    .topbar-hamburger { display: flex; margin-left: auto; margin-bottom: 10px; }
+    .topbar-nav, .topbar-right {
+        display: none; width: 100%; flex-direction: column; align-items: stretch;
+        border: none; padding: 6px 0 10px; gap: 2px;
+    }
+    .topbar-right { border-left: none; border-top: 1px solid rgba(255,255,255,.08); padding-top: 10px; flex-direction: row; flex-wrap: wrap; }
+    .topbar-nav.mob-open, .topbar-right.mob-open { display: flex; }
+    .tb-group { width: 100%; }
+    .tb-btn, .tb-user-btn { width: 100%; justify-content: flex-start; }
+    .tb-group:hover .tb-dropdown { display: none; }
+    .tb-group.open  .tb-dropdown { display: block; }
+    .tb-dropdown { position: static; box-shadow: none; border: none;
+        background: rgba(0,0,0,.25); border-radius: 7px; margin-top: 2px; min-width: 0; }
+    .tb-dropdown-right { right: auto; }
+    .main-content { margin-top: 94px; padding: 16px; }
+    .quick-menu { top: 56px; }
+    .topbar-brand { margin-bottom: 10px; }
 }
 </style>
 <script>
-function toggleSubmenu(btn) {
-    var group = btn.closest('.nav-item-group');
-    group.classList.toggle('open');
+/* Mobile: tap to open/close (hover doesn't work on touch) */
+function tbToggle(btn) {
+    var group = btn.closest('.tb-group');
+    var wasOpen = group.classList.contains('open');
+    document.querySelectorAll('.tb-group.open').forEach(function(g){ g.classList.remove('open'); });
+    if (!wasOpen) group.classList.add('open');
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.tb-group')) {
+        document.querySelectorAll('.tb-group.open').forEach(function(g){ g.classList.remove('open'); });
+    }
+});
+
+function tbToggleMobile() {
+    document.getElementById('topbarNav').classList.toggle('mob-open');
+    document.getElementById('topbarRight').classList.toggle('mob-open');
 }
 </script>

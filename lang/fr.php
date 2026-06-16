@@ -16,6 +16,7 @@ return [
     'nav_products'         => 'Produits',
     'nav_stock'            => 'Stock',
     'nav_purchases'        => 'Achats',
+      'nav_purchase_advice'  => 'Conseils d\'Achats',
     'nav_sales'            => 'Ventes',
     'nav_suppliers'        => 'Fournisseurs',
     'nav_home_consumption' => 'Consommation Maison',
