@@ -188,4 +188,19 @@ function redirect($url) {
     header("Location: $url");
     exit();
 }
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+function audit_log(mysqli $conn, string $action, string $module, int $record_id, string $description, array $old = [], array $new = []): void {
+    $user_id  = (int)($_SESSION['user_id'] ?? 0);
+    $username = mysqli_real_escape_string($conn, $_SESSION['username'] ?? 'system');
+    $action_e = mysqli_real_escape_string($conn, $action);
+    $module_e = mysqli_real_escape_string($conn, $module);
+    $desc_e   = mysqli_real_escape_string($conn, $description);
+    $ip       = mysqli_real_escape_string($conn, $_SERVER['REMOTE_ADDR'] ?? '');
+    $old_sql  = $old ? "'" . mysqli_real_escape_string($conn, json_encode($old, JSON_UNESCAPED_UNICODE)) . "'" : 'NULL';
+    $new_sql  = $new ? "'" . mysqli_real_escape_string($conn, json_encode($new, JSON_UNESCAPED_UNICODE)) . "'" : 'NULL';
+    mysqli_query($conn, "INSERT INTO audit_log (user_id, username, action, module, record_id, description, old_value, new_value, ip_address)
+        VALUES ($user_id, '$username', '$action_e', '$module_e', $record_id, '$desc_e', $old_sql, $new_sql, '$ip')");
+}
+// ─────────────────────────────────────────────────────────────────────────────
 ?>

@@ -35,8 +35,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_product'])) {
     $unit_measure  = mysqli_real_escape_string($conn, $_POST['edit_unit_measure']);
     $unit_price    = mysqli_real_escape_string($conn, $_POST['edit_unit_price']);
 
+    $old_prod = mysqli_fetch_assoc(mysqli_query($conn, "SELECT name, category, reorder_level, unit_measure, unit_price FROM products WHERE id=$id"));
     if (mysqli_query($conn, "UPDATE products SET name='$name', category='$category', reorder_level='$reorder_level',
                               unit_measure='$unit_measure', unit_price='$unit_price' WHERE id=$id")) {
+        audit_log($conn, 'UPDATE', 'products', $id, "Edited product id=$id",
+            $old_prod ?: [],
+            ['name' => $name, 'category' => $category, 'reorder_level' => $reorder_level, 'unit_measure' => $unit_measure, 'unit_price' => $unit_price]);
         $_SESSION['flash_success'] = t('prod_updated_ok');
     } else {
         $_SESSION['flash_error'] = t('prod_updated_err') . ': ' . mysqli_error($conn);
@@ -48,7 +52,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_product'])) {
 // Handle Delete Product
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $id = (int)$_GET['delete'];
+    $del_row = mysqli_fetch_assoc(mysqli_query($conn, "SELECT name, category FROM products WHERE id=$id"));
     mysqli_query($conn, "UPDATE products SET deleted=1 WHERE id=$id");
+    if ($del_row) {
+        audit_log($conn, 'DELETE', 'products', $id, "Soft-deleted product id=$id",
+            ['name' => $del_row['name'], 'category' => $del_row['category'], 'deleted' => 0],
+            ['deleted' => 1]);
+    }
     header("Location: products.php");
     exit;
 }

@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/stock_value.php';
 
 if (!isLoggedIn()) {
     redirect('login.php');
@@ -17,6 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_bulk_sale'])) {
             mysqli_query($conn, "DELETE FROM loans WHERE product_id={$row['product_id']} AND client='$client_e' AND amount={$row['loan_amount']} AND loan_date='{$row['sale_date']}' LIMIT 1");
         }
         mysqli_query($conn, "DELETE FROM sales_bulk WHERE id=$id");
+        recalcStockValue($conn, (int)$row['product_id']);
+        audit_log($conn, 'DELETE', 'sales_bulk', $id, "Deleted bulk sale id=$id",
+            ['product_id' => $row['product_id'], 'qty' => $row['quantity'], 'price' => $row['package_price'], 'customer' => $row['customer_name'], 'cash' => $row['cash_amount'], 'momo' => $row['momo_amount'], 'loan' => $row['loan_amount'], 'total' => $row['total_amount'], 'date' => $row['sale_date']],
+            []);
         $_SESSION['flash_success'] = t('sales_bulk_deleted');
     }
     header("Location: sales.php?tab=bulk"); exit;
@@ -41,6 +46,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_bulk_sale'])) {
             mysqli_query($conn, "UPDATE stock SET quantity = quantity + $qty_diff WHERE product_id = {$old['product_id']}");
         }
         mysqli_query($conn, "UPDATE sales_bulk SET quantity=$new_qty, package_price=$new_price, total_amount=$total_amount, customer_name='$customer_name', cash_amount=$cash_amount, momo_amount=$momo_amount, loan_amount=$loan_amount, sale_date='$sale_date' WHERE id=$id");
+        recalcStockValue($conn, (int)$old['product_id']);
+        audit_log($conn, 'UPDATE', 'sales_bulk', $id, "Edited bulk sale id=$id",
+            ['qty' => $old['quantity'], 'price' => $old['package_price'], 'customer' => $old['customer_name'], 'cash' => $old['cash_amount'], 'momo' => $old['momo_amount'], 'loan' => $old['loan_amount'], 'date' => $old['sale_date']],
+            ['qty' => $new_qty, 'price' => $new_price, 'customer' => $customer_name, 'cash' => $cash_amount, 'momo' => $momo_amount, 'loan' => $loan_amount, 'date' => $sale_date]);
         $_SESSION['flash_success'] = t('sales_bulk_updated');
     }
     header("Location: sales.php?tab=bulk"); exit;
@@ -57,6 +66,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_retail_sale']))
             mysqli_query($conn, "DELETE FROM loans WHERE product_id={$row['product_id']} AND client='$client_e' AND amount={$row['loan_amount']} AND loan_date='{$row['sale_date']}' LIMIT 1");
         }
         mysqli_query($conn, "DELETE FROM sales_retail WHERE id=$id");
+        recalcStockValue($conn, (int)$row['product_id']);
+        audit_log($conn, 'DELETE', 'sales_retail', $id, "Deleted retail sale id=$id",
+            ['product_id' => $row['product_id'], 'pcs' => $row['pieces_sold'], 'price' => $row['retail_price'], 'customer' => $row['customer_name'], 'cash' => $row['cash_amount'], 'momo' => $row['momo_amount'], 'loan' => $row['loan_amount'], 'total' => $row['total_amount'], 'date' => $row['sale_date']],
+            []);
         $_SESSION['flash_success'] = t('sales_retail_deleted');
     }
     header("Location: sales.php?tab=retail"); exit;
@@ -81,6 +94,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_retail_sale'])) {
             mysqli_query($conn, "UPDATE retail_stock SET pieces_quantity = pieces_quantity + $qty_diff WHERE product_id = {$old['product_id']}");
         }
         mysqli_query($conn, "UPDATE sales_retail SET pieces_sold=$new_qty, retail_price=$new_price, total_amount=$total_amount, customer_name='$customer_name', cash_amount=$cash_amount, momo_amount=$momo_amount, loan_amount=$loan_amount, sale_date='$sale_date' WHERE id=$id");
+        recalcStockValue($conn, (int)$old['product_id']);
+        audit_log($conn, 'UPDATE', 'sales_retail', $id, "Edited retail sale id=$id",
+            ['pcs' => $old['pieces_sold'], 'price' => $old['retail_price'], 'customer' => $old['customer_name'], 'cash' => $old['cash_amount'], 'momo' => $old['momo_amount'], 'loan' => $old['loan_amount'], 'date' => $old['sale_date']],
+            ['pcs' => $new_qty, 'price' => $new_price, 'customer' => $customer_name, 'cash' => $cash_amount, 'momo' => $momo_amount, 'loan' => $loan_amount, 'date' => $sale_date]);
         $_SESSION['flash_success'] = t('sales_retail_updated');
     }
     header("Location: sales.php?tab=retail"); exit;
@@ -165,6 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['bulk_sale'])) {
 
     if ($ok) {
         mysqli_commit($conn);
+        recalcStockValue($conn, $product_id);
         $parts = [];
         if ($cash_amount > 0) $parts[] = "Cash: RWF " . number_format($cash_amount, 0);
         if ($momo_amount > 0) $parts[] = "Momo: RWF " . number_format($momo_amount, 0);
@@ -245,6 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['retail_sale'])) {
 
     if ($ok) {
         mysqli_commit($conn);
+        recalcStockValue($conn, $product_id);
         $parts = [];
         if ($cash_amount > 0) $parts[] = "Cash: RWF " . number_format($cash_amount, 0);
         if ($momo_amount > 0) $parts[] = "Momo: RWF " . number_format($momo_amount, 0);
@@ -394,6 +413,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['process_refund'])) {
 
     // Mark the sale as refunded (sale_table already set above)
     mysqli_query($conn, "UPDATE $sale_table SET refunded = 1 WHERE id = $sale_id");
+
+    if ($product_id) recalcStockValue($conn, (int)$product_id);
 
     header('Content-Type: application/json');
     echo json_encode(['success' => true]);

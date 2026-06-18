@@ -46,6 +46,7 @@ $nav = [
         'roles' => ['admin', 'manager'],
         'items' => [
             ['href' => 'users.php',        'icon' => '◎', 'label' => t('nav_users'),       'roles_item' => ['admin','manager']],
+            ['href' => 'audit_log.php',    'icon' => '⊘', 'label' => 'Audit Log',           'roles_item' => ['admin','manager']],
             ['href' => 'database.php',     'icon' => '⊗', 'label' => t('nav_database'),    'roles_item' => ['admin']],
             ['href' => 'subscription.php', 'icon' => '🔑', 'label' => t('sub_nav_label'),   'roles_item' => ['admin']],
             ['href' => 'run_update.php',   'icon' => '⚙', 'label' => t('nav_run_updates'), 'roles_item' => ['admin']],
@@ -142,8 +143,10 @@ foreach ($nav as $key => $section) {
         ['href' => 'dashboard.php',      'icon' => '▣', 'label' => t('nav_dashboard')],
         ['href' => 'sale_bulk.php',      'icon' => '⤴', 'label' => 'Bulk Sale'],
         ['href' => 'sale_retail.php',    'icon' => '⤴', 'label' => 'Retail Sale'],
+        ['href' => 'sales.php',          'icon' => '⤴', 'label' => t('nav_sales')],
         ['href' => 'purchases.php',      'icon' => '⤵', 'label' => t('nav_purchases')],
         ['href' => 'stock.php',          'icon' => '⊞', 'label' => t('nav_stock')],
+        ['href' => 'stock_adjust.php',   'icon' => '✏', 'label' => 'Adjust Stock'],
         ['href' => 'purchase_advice.php','icon' => '💡', 'label' => t('nav_purchase_advice')],
         ['href' => 'expenses.php',       'icon' => '−', 'label' => t('nav_expenses')],
         ['href' => 'loans.php',          'icon' => '⇄', 'label' => t('nav_loans')],

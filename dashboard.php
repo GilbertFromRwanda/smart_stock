@@ -279,22 +279,40 @@ if (($today_sales['total'] ?? 0) == 0) {
         <?php include 'sidebar.php'; ?>
         
         <div class="main-content">
-            <!-- Welcome Message -->
-            <div class="welcome-message">
-                <div>
-                    <h2><?php echo t('dash_welcome_back'); ?> <?php echo explode(' ', $_SESSION['full_name'] ?? $_SESSION['username'])[0]; ?></h2>
-                    <p><?php echo date('l, F j, Y'); ?> &nbsp;·&nbsp; <?php echo t('dash_overview'); ?></p>
-                </div>
-                <div class="welcome-time">
-                    <?php 
-                    $hour = date('H');
-                    if ($hour < 12) echo t('dash_good_morning');
-                    elseif ($hour < 17) echo t('dash_good_afternoon');
-                    else echo t('dash_good_evening');
-                    ?>
-                </div>
+            <!-- Network access banner -->
+            <div id="lanBanner" style="display:flex;align-items:center;gap:10px;padding:10px 16px;
+                        background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;
+                        margin-bottom:20px;flex-wrap:wrap;">
+                <span style="font-size:12px;color:#0369a1;font-weight:600;">🌐 Network Access</span>
+                <code id="lanUrl" style="font-size:12px;background:#e0f2fe;padding:3px 10px;
+                      border-radius:6px;color:#0c4a6e;letter-spacing:.3px;">detecting…</code>
+                <button onclick="copyLanUrl()" style="font-size:11px;padding:3px 10px;
+                        border:1px solid #7dd3fc;border-radius:6px;background:#fff;
+                        color:#0369a1;cursor:pointer;font-weight:600;" id="copyBtn">Copy</button>
+                <span style="font-size:11px;color:#64748b;">— share with devices on this Wi-Fi/LAN</span>
             </div>
-            
+            <script>
+            fetch('get_lan_ip.php')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    document.getElementById('lanUrl').textContent = d.url;
+                })
+                .catch(function() {
+                    document.getElementById('lanBanner').style.display = 'none';
+                });
+
+            function copyLanUrl() {
+                var url = document.getElementById('lanUrl').textContent;
+                if (url === 'detecting…') return;
+                navigator.clipboard.writeText(url).then(function() {
+                    var btn = document.getElementById('copyBtn');
+                    btn.textContent = 'Copied!';
+                    btn.style.background = '#d1fae5';
+                    setTimeout(function() { btn.textContent = 'Copy'; btn.style.background = '#fff'; }, 2000);
+                });
+            }
+            </script>
+
             <!-- Key Statistics -->
             <div class="stats-grid">
                 <div class="stat-card">

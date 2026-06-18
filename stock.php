@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/stock_value.php';
 
 if (!isLoggedIn()) {
     redirect('login.php');
@@ -13,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_stock'])) {
     $package_price    = max(0, (float)$_POST['package_price']);
     $retail_price     = max(0, (float)$_POST['retail_price']);
 
+    $old_s = mysqli_fetch_assoc(mysqli_query($conn, "SELECT quantity,package_price FROM stock WHERE product_id=$product_id"));
     mysqli_query($conn, "
         UPDATE stock
         SET quantity = $quantity,
@@ -21,6 +23,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_stock'])) {
             retail_price  = $retail_price
         WHERE product_id = $product_id
     ");
+    recalcStockValue($conn, $product_id);
+    audit_log($conn, 'UPDATE', 'stock', $product_id, "Edited WH stock product_id=$product_id",
+        ['qty' => $old_s['quantity'], 'package_price' => $old_s['package_price']],
+        ['qty' => $quantity, 'pieces_per_pkg' => $pieces_per_pkg, 'package_price' => $package_price, 'retail_price' => $retail_price]);
     $_SESSION['flash_success'] = t('stock_updated_ok');
     header("Location: stock.php"); exit;
 }
@@ -31,12 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_retail_stock'])) 
     $pieces_qty     = max(0, (int)$_POST['pieces_quantity']);
     $retail_price   = max(0, (float)$_POST['retail_price']);
 
+    $old_r = mysqli_fetch_assoc(mysqli_query($conn, "SELECT pieces_quantity FROM retail_stock WHERE product_id=$product_id"));
     mysqli_query($conn, "
         UPDATE retail_stock
         SET pieces_quantity = $pieces_qty,
             retail_price    = $retail_price
         WHERE product_id = $product_id
     ");
+    recalcStockValue($conn, $product_id);
+    audit_log($conn, 'UPDATE', 'retail_stock', $product_id, "Edited retail stock product_id=$product_id",
+        ['pcs' => $old_r['pieces_quantity']],
+        ['pcs' => $pieces_qty, 'retail_price' => $retail_price]);
     $_SESSION['flash_success'] = t('stock_retail_updated');
     header("Location: stock.php"); exit;
 }
@@ -82,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['move_to_retail'])) {
         mysqli_query($conn, "INSERT INTO stock_movements (product_id, pieces_moved, moved_date, notes)
                              VALUES ($product_id, $pieces_to_move, CURDATE(), '$note')");
 
+        audit_log($conn, 'MOVE_RETAIL', 'stock', $product_id, "Moved to retail product_id=$product_id",
+            ['wh_qty' => $stock['quantity']],
+            ['wh_qty' => $stock['quantity'] - $packages_to_remove, 'retail_pcs_added' => $pieces_to_move]);
         $_SESSION['flash_success'] = $move_type === 'packages'
             ? "Moved $packages_to_remove package(s) ($pieces_to_move pieces) to retail shop successfully"
             : "Moved $pieces_to_move pieces to retail shop successfully";

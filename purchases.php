@@ -71,6 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_purchase'])) {
             require_once __DIR__ . '/stock_value.php';
             recalcStockValue($conn, (int)$product_id);
             if ($old['product_id'] != $product_id) recalcStockValue($conn, (int)$old['product_id']);
+            audit_log($conn, 'UPDATE', 'purchases', $purchase_id, "Edited purchase id=$purchase_id",
+                ['product_id' => $old['product_id'], 'qty' => $old['quantity'], 'cost_price' => $old['cost_price'], 'package_price' => $old['package_price'], 'retail_price' => $old['retail_price'], 'date' => $old['purchase_date']],
+                ['product_id' => $product_id, 'qty' => $quantity, 'cost_price' => $cost_price, 'package_price' => $package_price, 'retail_price' => $retail_price, 'date' => $purchase_date]);
             $_SESSION['flash_success'] = t('purch_updated_ok');
         } else {
             $_SESSION['flash_error'] = t('purch_updated_err') . ': ' . mysqli_error($conn);

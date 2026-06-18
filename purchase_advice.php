@@ -2,6 +2,7 @@
 require_once 'config.php';
 if (!isLoggedIn()) redirect('login.php');
 
+
 $days  = isset($_GET['days']) && in_array((int)$_GET['days'], [7, 14, 30, 60, 90]) ? (int)$_GET['days'] : 30;
 $since = mysqli_real_escape_string($conn, date('Y-m-d', strtotime("-{$days} days")));
 
@@ -69,9 +70,12 @@ SELECT
      WHERE pu.product_id = p.id
      ORDER BY pu.purchase_date DESC LIMIT 1) AS last_cost,
 
-    (SELECT pu.quantity FROM purchases pu
+    (SELECT ROUND(AVG(pu.quantity)) FROM purchases pu
+     WHERE pu.product_id = p.id) AS avg_buy_qty,
+
+    (SELECT pu.id FROM purchases pu
      WHERE pu.product_id = p.id
-     ORDER BY pu.purchase_date DESC LIMIT 1) AS avg_buy_qty
+     ORDER BY pu.purchase_date DESC LIMIT 1) AS last_purchase_id
 
 FROM products p
 LEFT JOIN stock s
@@ -147,9 +151,10 @@ while ($r = mysqli_fetch_assoc($res)) {
         'last_qty'    => (int)$r['last_buy_qty'],
         'last_cost'   => (float)$r['last_cost'],
         'pkg_price'   => (float)$r['pkg_price'],
-        'tier'        => $tier,
-        'badge'       => $badge,
-        'cls'         => $cls,
+        'tier'            => $tier,
+        'badge'           => $badge,
+        'cls'             => $cls,
+        'last_purchase_id'=> $r['last_purchase_id'] ? (int)$r['last_purchase_id'] : null,
     ];
 }
 
@@ -163,6 +168,8 @@ foreach ($products as &$p) {
     $p['rev_share'] = $total_revenue > 0 ? round($p['revenue'] / $total_revenue * 100, 1) : 0;
 }
 unset($p);
+
+$max_rev_share = $products ? max(1, max(array_column($products, 'rev_share'))) : 1;
 
 // Summary counts
 $counts = [4 => 0, 3 => 0, 2 => 0, 1 => 0, 0 => 0];
@@ -369,8 +376,45 @@ foreach ($products as $p) {
             <p>No product data found for this period.</p>
         </div>
         <?php else: ?>
+
+        <!-- Filter bar -->
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+            <input type="text" id="advSearch" placeholder="Search product…"
+                   oninput="filterTable()"
+                   style="flex:1;min-width:160px;max-width:280px;padding:7px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;">
+            <select id="advCat" onchange="filterTable()"
+                    style="padding:7px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;background:var(--white);">
+                <option value="">All categories</option>
+                <?php
+                $cats = array_unique(array_filter(array_column($products, 'category')));
+                sort($cats);
+                foreach ($cats as $cat): ?>
+                <option value="<?php echo htmlspecialchars($cat); ?>"><?php echo htmlspecialchars($cat); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select id="advStatus" onchange="filterTable()"
+                    style="padding:7px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;background:var(--white);">
+                <option value="">All statuses</option>
+                <option value="out">Out of Stock</option>
+                <option value="urgent">Order Now</option>
+                <option value="soon">Order Soon</option>
+                <option value="monitor">Monitor</option>
+                <option value="ok">Well Stocked</option>
+            </select>
+            <select id="advSort" onchange="sortTable()"
+                    style="padding:7px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;background:var(--white);">
+                <option value="revenue-desc">Revenue ↓</option>
+                <option value="urgency-desc">Urgency ↓</option>
+                <option value="revshare-desc">Rev Share ↓</option>
+                <option value="daily-desc">Daily Sales ↓</option>
+                <option value="days-asc">Stock Left ↑ (critical first)</option>
+                <option value="revenue-asc">Revenue ↑</option>
+            </select>
+            <button class="btn btn-secondary" onclick="exportCSV()" style="margin-left:auto;font-size:12px;">⬇ Export CSV</button>
+        </div>
+
         <div class="table-responsive">
-            <table class="table adv-table">
+            <table class="table adv-table" id="advTable">
                 <thead>
                     <tr>
                         <th>#</th>
@@ -381,6 +425,7 @@ foreach ($products as $p) {
                         <th>Rev Share</th>
                         <th>Status</th>
                         <th>Advice</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -417,12 +462,19 @@ foreach ($products as $p) {
                     switch ($p['tier']) {
                         case 4: $when = 'Immediately — out of stock'; break;
                         case 3: $when = 'Order within ' . max(1, round($p['days_left'])) . ' day(s)'; break;
-                        case 2: $when = 'Order within this week'; break;
+                        case 2: $when = 'Order within ~' . max(1, round($p['days_left'])) . ' day(s)'; break;
                         case 1: $when = 'Plan order this month'; break;
                         default: $when = 'Not urgent'; break;
                     }
                 ?>
-                <tr>
+                <tr data-name="<?php echo strtolower(htmlspecialchars($p['name'])); ?>"
+                    data-cat="<?php echo strtolower(htmlspecialchars($p['category'] ?? '')); ?>"
+                    data-cls="<?php echo $p['cls']; ?>"
+                    data-revenue="<?php echo $p['revenue']; ?>"
+                    data-revshare="<?php echo $p['rev_share']; ?>"
+                    data-daily="<?php echo round($p['daily'], 2); ?>"
+                    data-days="<?php echo $p['days_left'] === PHP_INT_MAX ? 9999999 : round($p['days_left'], 1); ?>"
+                    data-tier="<?php echo $p['tier']; ?>">
                     <td style="color:var(--secondary);font-size:12px;"><?php echo $i + 1; ?></td>
                     <td>
                         <div style="font-weight:600;font-size:13px;"><?php echo htmlspecialchars($p['name']); ?></div>
@@ -467,7 +519,7 @@ foreach ($products as $p) {
                     <td style="min-width:90px;">
                         <div class="rev-bar-wrap">
                             <div class="rev-bar-bg">
-                                <div class="rev-bar-fill" style="width:<?php echo min(100, $p['rev_share'] * 3); ?>%"></div>
+                                <div class="rev-bar-fill" style="width:<?php echo min(100, round($p['rev_share'] / $max_rev_share * 100)); ?>%"></div>
                             </div>
                             <span><?php echo $p['rev_share']; ?>%</span>
                         </div>
@@ -490,6 +542,15 @@ foreach ($products as $p) {
                         <div class="advice-how" style="color:var(--secondary);">🛒 <?php echo $how; ?></div>
                         <?php endif; ?>
                         <div class="advice-when <?php echo $when_cls; ?>">⏰ <?php echo $when; ?></div>
+                    </td>
+                    <td>
+                        <?php if ($p['last_purchase_id']): ?>
+                        <a href="new-purchase.php?repeat=<?php echo $p['last_purchase_id']; ?>"
+                           class="btn btn-secondary"
+                           style="font-size:11px;padding:4px 10px;white-space:nowrap;">
+                            🛒 Buy
+                        </a>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -519,6 +580,7 @@ var PRODUCTS = <?php
         'badge'     => $p['badge'],
         'cls'       => $p['cls'],
         'revenue'   => $p['revenue'],
+        'rev_share' => $p['rev_share'],
     ], $products), JSON_HEX_TAG | JSON_HEX_AMP);
 ?>;
 
@@ -647,6 +709,76 @@ function clearPlan() {
 
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sortTable() {
+    var val   = document.getElementById('advSort').value;
+    var tbody = document.querySelector('#advTable tbody');
+    var rows  = Array.from(tbody.querySelectorAll('tr'));
+
+    rows.sort(function(a, b) {
+        var d = a.dataset, e = b.dataset;
+        switch (val) {
+            case 'revenue-desc':  return parseFloat(e.revenue)  - parseFloat(d.revenue);
+            case 'revenue-asc':   return parseFloat(d.revenue)  - parseFloat(e.revenue);
+            case 'revshare-desc': return parseFloat(e.revshare) - parseFloat(d.revshare);
+            case 'daily-desc':    return parseFloat(e.daily)    - parseFloat(d.daily);
+            case 'days-asc':      return parseFloat(d.days)     - parseFloat(e.days);
+            case 'urgency-desc':
+                var td = parseInt(e.tier) - parseInt(d.tier);
+                return td !== 0 ? td : parseFloat(e.revenue) - parseFloat(d.revenue);
+            default: return 0;
+        }
+    });
+    rows.forEach(function(r) { tbody.appendChild(r); });
+    filterTable();
+}
+
+function filterTable() {
+    var search = document.getElementById('advSearch').value.toLowerCase();
+    var cat    = document.getElementById('advCat').value.toLowerCase();
+    var status = document.getElementById('advStatus').value;
+    var rows   = document.querySelectorAll('#advTable tbody tr');
+    var idx    = 1;
+    rows.forEach(function(row) {
+        var name = row.dataset.name || '';
+        var rc   = row.dataset.cat  || '';
+        var cls  = row.dataset.cls  || '';
+        var show = (!search || name.includes(search))
+                && (!cat    || rc === cat)
+                && (!status || cls === status);
+        row.style.display = show ? '' : 'none';
+        if (show) row.cells[0].textContent = idx++;
+    });
+}
+
+function exportCSV() {
+    var headers = ['#','Product','Category','Stock (pcs)','Daily Sales (pcs/day)','Revenue','Rev Share %','Status','Suggested (pkgs)','Cost/pkg'];
+    var rows = [headers];
+    PRODUCTS.forEach(function(p, i) {
+        rows.push([
+            i + 1,
+            p.name,
+            p.category || '',
+            '',
+            '',
+            p.revenue,
+            p.rev_share !== undefined ? p.rev_share : '',
+            p.badge,
+            p.suggested,
+            p.last_cost
+        ]);
+    });
+    var csv = rows.map(function(r) {
+        return r.map(function(c) {
+            var s = String(c);
+            return s.includes(',') || s.includes('"') ? '"' + s.replace(/"/g,'""') + '"' : s;
+        }).join(',');
+    }).join('\n');
+    var a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'purchase_advice.csv';
+    a.click();
 }
 </script>
 </body>
